@@ -1,0 +1,44 @@
+# Byte-compiled / runtime
+__pycache__/
+*.py[cod]
+*.so
+
+# Packaging / build
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.python-version
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# SIESTA scratch outputs that may be dropped next to the app for testing
+*.fdf
+*.psml
+*.xyz
+*.pdb
+*.ANI
+*.XV
+*.DM
+*.bands
+*.out
+*.log

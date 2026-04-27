@@ -1,0 +1,132 @@
+/* Minimal, scientific look: white surfaces, neutral grey chrome.       */
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                 system-ui, sans-serif;
+    color: #1c1c1c;
+    background: #f6f7f8;
+}
+
+header {
+    padding: 12px 18px;
+    border-bottom: 1px solid #e3e3e3;
+    background: #fff;
+}
+
+header h1 {
+    margin: 0 0 8px;
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+.loader {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.loader label { font-size: 0.92rem; color: #444; }
+.loader input[type="text"] {
+    padding: 5px 8px;
+    font: inherit;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    min-width: 380px;
+}
+.loader button {
+    padding: 5px 14px;
+    font: inherit;
+    cursor: pointer;
+    border: 1px solid #888;
+    background: #fff;
+    border-radius: 4px;
+}
+.loader button:hover { background: #eee; }
+
+.status { color: #555; font-size: 0.88rem; margin-left: 4px; }
+.status.error { color: #b21515; }
+.status.ok { color: #1d7a3a; }
+
+main {
+    padding: 12px 18px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.viewer-row {
+    display: grid;
+    grid-template-columns: 1fr 270px;
+    gap: 14px;
+    min-height: 540px;
+}
+
+#viewer {
+    width: 100%;
+    height: 540px;
+    border: 1px solid #d8d8d8;
+    background: #fff;
+    position: relative;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.controls { display: flex; flex-direction: column; gap: 10px; }
+
+fieldset {
+    border: 1px solid #d8d8d8;
+    border-radius: 6px;
+    padding: 6px 12px 10px;
+    background: #fff;
+}
+fieldset legend {
+    font-weight: 600;
+    padding: 0 4px;
+    font-size: 0.88rem;
+    color: #333;
+}
+fieldset label {
+    display: block;
+    margin: 6px 0;
+    font-size: 0.86rem;
+    color: #444;
+}
+fieldset select,
+fieldset input[type="number"],
+fieldset input[type="range"] {
+    width: 100%;
+    margin-top: 2px;
+    font: inherit;
+}
+fieldset .row { display: flex; gap: 6px; margin: 4px 0; }
+fieldset button {
+    padding: 4px 10px;
+    cursor: pointer;
+    border: 1px solid #888;
+    background: #fff;
+    border-radius: 3px;
+    font: inherit;
+    font-size: 0.85rem;
+}
+fieldset button:hover { background: #eee; }
+
+.plots-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+}
+.plot {
+    height: 320px;
+    border: 1px solid #d8d8d8;
+    background: #fff;
+    border-radius: 4px;
+}
+
+@media (max-width: 980px) {
+    .viewer-row { grid-template-columns: 1fr; }
+    .plots-row  { grid-template-columns: 1fr; }
+}

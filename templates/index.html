@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SIESTA live viewer</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<script src="https://3Dmol.org/build/3Dmol-min.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+<header>
+  <h1>SIESTA live viewer</h1>
+  <div class="loader">
+    <label for="path-input">Output file:</label>
+    <input id="path-input" type="text" placeholder="/abs/path/to/run.out" size="60" autofocus>
+    <button id="load-btn">Load</button>
+    <span id="status" class="status">No file loaded.</span>
+  </div>
+</header>
+
+<main>
+  <section class="viewer-row">
+    <div id="viewer"></div>
+
+    <aside class="controls">
+      <fieldset>
+        <legend>Style</legend>
+
+        <label>Representation
+          <select id="rep">
+            <option value="stick" selected>stick</option>
+            <option value="ballstick">ball &amp; stick</option>
+            <option value="sphere">sphere (CPK)</option>
+            <option value="line">line</option>
+          </select>
+        </label>
+
+        <label>Atom radius scale
+          <input id="radius" type="range" min="0.2" max="2.5" step="0.05" value="1.0">
+        </label>
+
+        <label>Color scheme
+          <select id="colorscheme">
+            <option value="Jmol" selected>Jmol (CPK)</option>
+            <option value="rasmol">Rasmol</option>
+            <option value="default">3Dmol default</option>
+          </select>
+        </label>
+
+        <label>Background
+          <select id="bg">
+            <option value="white" selected>white</option>
+            <option value="0xeeeeee">light grey</option>
+            <option value="black">black</option>
+          </select>
+        </label>
+
+        <label><input type="checkbox" id="show-cell" checked> Show unit cell</label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Overlays</legend>
+        <label><input type="checkbox" id="show-indices"> Show atom indices</label>
+        <label><input type="checkbox" id="show-forces"> Show force vectors</label>
+        <label>Arrow length scale (&Aring; per eV/&Aring;)
+          <input id="force-scale" type="range" min="0.1" max="5.0" step="0.1" value="1.0">
+          <span id="force-scale-val">1.0</span>
+        </label>
+        <label>Hide |F| smaller than (eV/&Aring;)
+          <input id="force-min" type="number" min="0" max="10" step="0.05" value="0.05">
+        </label>
+        <label><input type="checkbox" id="highlight-max" checked> Highlight largest force</label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Playback</legend>
+        <div class="row">
+          <button id="play">▶ Play</button>
+          <button id="pause">⏸ Pause</button>
+          <button id="prev">‹</button>
+          <button id="next">›</button>
+        </div>
+        <label>Frame <span id="frame-idx">0</span> / <span id="frame-tot">0</span>
+          <input id="frame-slider" type="range" min="0" max="0" value="0" step="1">
+        </label>
+        <label>Speed (ms / frame)
+          <input id="speed" type="number" min="20" max="3000" step="20" value="150">
+        </label>
+        <label><input type="checkbox" id="loop" checked> Loop</label>
+      </fieldset>
+    </aside>
+  </section>
+
+  <section class="plots-row">
+    <div id="energy-plot" class="plot"></div>
+    <div id="force-plot" class="plot"></div>
+  </section>
+</main>
+
+<script src="{{ url_for('static', filename='viewer.js') }}"></script>
+</body>
+</html>
