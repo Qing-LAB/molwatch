@@ -161,11 +161,16 @@ class SiestaParser(TrajectoryParser):
                     continue
 
                 # Max force: the unconstrained value sits on a line of
-                # the form "   Max    4.669483".  The duplicated line
+                # the form "   Max    4.669483", emitted right after
+                # the per-atom force block.  The duplicated line
                 # ending with "constrained" has 3 tokens, so we filter
-                # on token count.
+                # on token count.  Additionally we gate on a non-empty
+                # `step_forces`, so a stray "Max <num>" line earlier
+                # in the file (e.g. in a header / comment) can't be
+                # mis-attributed to whatever step we're currently on.
                 parts = stripped.split()
-                if parts and parts[0] == "Max" and len(parts) == 2:
+                if (parts and parts[0] == "Max" and len(parts) == 2
+                        and step_forces):
                     try:
                         step_max_force = float(parts[1])
                     except ValueError:

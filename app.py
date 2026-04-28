@@ -58,23 +58,45 @@ def _refresh_if_changed() -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
 
     Returns ``(state, None)`` on success or ``(None, error_message)`` on
     failure.  Cheap when the file is unchanged.
+
+    Locking strategy: snapshot path/mtime/parser under the lock, then
+    drop the lock during the actual parse so other concurrent requests
+    aren't blocked for the duration of a multi-MB log re-parse.  After
+    parsing we re-acquire and only commit the result if the active file
+    hasn't changed under us (defensive against a /api/load racing with
+    a /api/data poll).
     """
+    # ---- Snapshot under the lock --------------------------------
     with _lock:
         path = _state["path"]
         if not path:
             return None, "No file loaded yet."
-        if not os.path.isfile(path):
-            return None, f"File not found: {path}"
-        try:
-            mtime = os.path.getmtime(path)
-        except OSError as exc:
-            return None, str(exc)
-        parser_cls = _state["parser"]
-        if mtime != _state["mtime"]:
-            try:
-                _state["data"] = parser_cls.parse(path)
-            except Exception as exc:  # pragma: no cover - defensive
-                return None, f"Parse error: {exc}"
+        cached_mtime = _state["mtime"]
+        parser_cls   = _state["parser"]
+
+    if not os.path.isfile(path):
+        return None, f"File not found: {path}"
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError as exc:
+        return None, str(exc)
+
+    # ---- Cheap path: nothing changed ----------------------------
+    if mtime == cached_mtime:
+        with _lock:
+            return dict(_state), None
+
+    # ---- Parse OUTSIDE the lock ---------------------------------
+    try:
+        new_data = parser_cls.parse(path)
+    except Exception as exc:  # pragma: no cover - defensive
+        return None, f"Parse error: {exc}"
+
+    # ---- Re-acquire to commit (skip if a concurrent /api/load
+    #      already swapped to a different file under us) ---------
+    with _lock:
+        if _state["path"] == path and _state["parser"] is parser_cls:
+            _state["data"]  = new_data
             _state["mtime"] = mtime
         return dict(_state), None
 
@@ -147,6 +169,9 @@ def api_data():
     })
 
 
+_LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="molwatch -- live SIESTA / PySCF trajectory viewer."
@@ -155,6 +180,21 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=5000)
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
+
+    # Loud warning when binding to non-loopback.  /api/load reads any
+    # file the server can access, so exposing it on a network interface
+    # is effectively a remote arbitrary-file-read endpoint.
+    if args.host not in _LOCAL_HOSTS:
+        import sys as _sys
+        print(f"WARNING: --host={args.host} exposes /api/load to the network.",
+              file=_sys.stderr)
+        print("         The endpoint reads ANY local file the server can",
+              file=_sys.stderr)
+        print("         access.  Only do this on a trusted single-user",
+              file=_sys.stderr)
+        print("         machine, or add a reverse-proxy with auth in front.",
+              file=_sys.stderr)
+
     app.run(host=args.host, port=args.port, debug=args.debug, threaded=True)
 
 

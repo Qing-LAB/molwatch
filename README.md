@@ -48,17 +48,42 @@ molwatch/
 
 ```bash
 pip install -e .            # or: pip install -r requirements.txt
-python app.py               # http://127.0.0.1:5000
+molwatch                    # http://127.0.0.1:5000
 ```
 
 Or with custom host/port:
 
 ```bash
-python app.py --port 8080 --host 0.0.0.0
+molwatch --port 8080 --host 0.0.0.0
 ```
 
 Then open the page, paste the absolute path to your output file, and
 click **Load**.
+
+## Security model
+
+`/api/load` accepts an absolute filesystem path from the user and reads
+that file off disk.  This is fine when the server is bound to loopback
+(`--host 127.0.0.1`, the default) on a single-user machine, but exposing
+it on a network interface effectively gives anyone who can reach the
+port arbitrary read access to whatever the server process can see.
+
+molwatch prints a loud warning when you bind to anything that isn't
+loopback.  If you really need network access (pair-programming, a
+shared lab box, etc.):
+
+  * keep it behind a reverse-proxy with auth (nginx + basic-auth, or
+    Caddy + JWT, etc.); OR
+  * run it on the local machine and tunnel via ssh:
+    `ssh -L 5000:localhost:5000 user@compute-node` and use it as if
+    it were local.
+
+Browser-side cross-site POSTs to `/api/load` are blocked by the default
+CORS policy because the endpoint requires `Content-Type:
+application/json` — that triggers a CORS preflight that the browser
+rejects (no `Access-Control-Allow-Origin` is sent).  This isn't a
+substitute for proper auth, but it does block the obvious cross-origin
+phishing-style vector when running locally.
 
 ## Running with `molbuilder`
 

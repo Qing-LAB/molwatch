@@ -159,6 +159,32 @@ def test_source_format_tag(siesta_path):
     assert result["source_format"] == "siesta"
 
 
+def test_stray_max_line_outside_force_block_ignored(tmp_path):
+    """Regression: a 'Max <num>' line that appears OUTSIDE a force
+    block (e.g. in a header) must not be mis-attributed to the next
+    step's max-force.  The gate is `step_forces` non-empty: only after
+    the per-atom force block do we accept a Max line."""
+    sample = (
+        "Welcome to SIESTA -- v4.1\n"
+        "redata: prelude\n"
+        # Stray 'Max' line BEFORE any force block -- must be ignored.
+        "   Max    9.999999\n"
+        "\n"
+        "outcoor: Atomic coordinates (Ang):\n"
+        "   1.00000000    2.00000000    3.00000000   1       1  C\n"
+        "\n"
+        "siesta: E_KS(eV) =          -50.0000\n"
+        # No 'siesta: Atomic forces' block, no real Max line.
+    )
+    p = tmp_path / "stray.out"
+    p.write_text(sample)
+    result = SiestaParser.parse(str(p))
+    # One frame, no max-force -- the stray 9.999 mustn't have been
+    # attributed to it.
+    assert len(result["frames"]) == 1
+    assert result["max_forces"][0] is None
+
+
 def test_json_safe_no_nan(siesta_path):
     """Result must serialise with strict JSON (no NaN)."""
     result = SiestaParser.parse(siesta_path)
