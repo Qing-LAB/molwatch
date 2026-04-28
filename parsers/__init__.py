@@ -11,6 +11,7 @@ references a specific parser by name.
 
 from __future__ import annotations
 
+import os
 from typing import List, Type
 
 from .base import TrajectoryParser
@@ -34,7 +35,10 @@ class UnknownFormatError(ValueError):
 def detect_parser(path: str) -> Type[TrajectoryParser]:
     """Return the first parser class whose ``can_parse(path)`` is True.
 
-    Raises :class:`UnknownFormatError` if no parser matches.
+    Raises :class:`UnknownFormatError` if no parser matches; the error
+    message lists every registered format with its hint, plus a
+    targeted suggestion for the most common foot-gun (uploading the
+    PySCF .log instead of the geomeTRIC _optim.xyz).
     """
     for cls in PARSERS:
         try:
@@ -44,16 +48,44 @@ def detect_parser(path: str) -> Type[TrajectoryParser]:
             # A parser's sniffer should never raise -- but if it does,
             # don't let one buggy parser take down the dispatch.
             continue
-    raise UnknownFormatError(
-        f"no registered parser knows how to handle {path!r}.  "
-        f"Supported formats: " +
-        ", ".join(f"{c.label} ({c.name})" for c in PARSERS)
-    )
+
+    base = os.path.basename(path)
+    lines = [f"No registered parser knows how to handle {base!r}."]
+    lines.append("Supported formats:")
+    for c in PARSERS:
+        suffix = f" -- {c.hint}" if c.hint else ""
+        lines.append(f"  * {c.label}{suffix}")
+
+    # Targeted suggestion: a PySCF run produces several files; users
+    # often grab the .log because the name is familiar, but the file
+    # we want is the geomeTRIC trajectory.  Stem-match instead of just
+    # `.log` so we don't spam the suggestion for SIESTA users (whose
+    # main output ALSO often ends in .log -- e.g. siesta.log).
+    lower = base.lower()
+    if (lower.endswith(".log") and
+        ("pyscf" in lower or "_relax" in lower or "geom" in lower)):
+        # Best guess at what file they wanted.
+        stem = base
+        for suffix in (".log", "_geom.log", "_pyscf.log"):
+            if stem.endswith(suffix):
+                stem = stem[: -len(suffix)]
+                break
+        lines.append("")
+        lines.append(
+            f"Looks like a PySCF run -- the streaming trajectory is "
+            f"'{stem}_geom_optim.xyz', not '.log'.  Look for the *.xyz "
+            f"file in the same folder."
+        )
+
+    raise UnknownFormatError("\n".join(lines))
 
 
 def parser_summary() -> List[dict]:
     """Lightweight metadata used by the /api/formats endpoint."""
-    return [{"name": c.name, "label": c.label} for c in PARSERS]
+    return [
+        {"name": c.name, "label": c.label, "hint": c.hint}
+        for c in PARSERS
+    ]
 
 
 __all__ = [

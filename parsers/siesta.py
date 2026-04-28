@@ -29,6 +29,7 @@ from .base import TrajectoryParser
 class SiestaParser(TrajectoryParser):
     name  = "siesta"
     label = "SIESTA .out / .log"
+    hint  = "the main SIESTA run output (run.out, siesta.log, etc.)"
 
     # Format markers we look for in the file head to claim it.  These
     # strings appear in every SIESTA run somewhere in the first ~40 lines.

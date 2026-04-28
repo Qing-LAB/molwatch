@@ -116,6 +116,10 @@ header h1 .tag {
     color: var(--text-secondary);
     font-size: 0.88rem;
     margin-left: 4px;
+    /* Respect newlines in multi-line error messages (e.g. the
+       unsupported-format error lists each parser on its own line). */
+    white-space: pre-line;
+    line-height: 1.4;
 }
 .status.error { color: var(--error); }
 .status.ok    { color: var(--success); }

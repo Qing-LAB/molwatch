@@ -38,6 +38,12 @@ class TrajectoryParser(ABC):
     #: Human-readable name shown in the UI ("SIESTA .out", "PySCF / geomeTRIC").
     label: str = "abstract"
 
+    #: One-line description of WHAT FILE the user should hand us.  Surfaced
+    #: in the "no registered parser" error so users who upload the wrong
+    #: file (e.g. PySCF .log instead of geomeTRIC _optim.xyz) get told
+    #: which file to look for instead.
+    hint: str = ""
+
     @classmethod
     @abstractmethod
     def can_parse(cls, path: str) -> bool:

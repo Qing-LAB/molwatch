@@ -44,6 +44,8 @@ _COMMENT_RE = re.compile(
 class PySCFParser(TrajectoryParser):
     name  = "pyscf"
     label = "PySCF / geomeTRIC trajectory"
+    hint  = ("geomeTRIC's streaming trajectory <job>_geom_optim.xyz "
+             "(NOT the PySCF .log)")
 
     @classmethod
     def can_parse(cls, path: str) -> bool:
