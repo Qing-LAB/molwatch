@@ -17,7 +17,15 @@
     <label for="path-input">Output file:</label>
     <input id="path-input" type="text"
            placeholder="/abs/path/to/run.out  or  /abs/path/to/job_geom_optim.xyz"
-           size="60" autofocus>
+           size="60" autofocus
+           title="Type an absolute path for live polling, or leave empty
+and click Load to pick a file (one-shot view, no live updates).">
+    <!-- Hidden file picker; shown only when Load is clicked with an
+         empty path-input.  Picker-selected files are uploaded as
+         multipart and parsed once (no polling, since the browser
+         doesn't expose the file's filesystem path). -->
+    <input id="file-picker" type="file" hidden
+           accept=".out,.log,.xyz,.ANI,text/plain,chemical/x-xyz">
     <button id="load-btn">Load</button>
     <span id="status" class="status">No file loaded.</span>
   </div>

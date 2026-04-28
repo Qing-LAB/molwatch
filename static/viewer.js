@@ -453,6 +453,13 @@
         state.pollTimer = setInterval(pollOnce, POLL_MS);
     }
 
+    function stopPolling() {
+        if (state.pollTimer) {
+            clearInterval(state.pollTimer);
+            state.pollTimer = null;
+        }
+    }
+
     /* ------------------------------------------------------------------ */
     /*  Playback                                                           */
     /* ------------------------------------------------------------------ */
@@ -483,12 +490,62 @@
     /*  UI wiring                                                          */
     /* ------------------------------------------------------------------ */
 
-    $("load-btn").addEventListener("click", async () => {
+    /*  Load button has two behaviours:
+     *    - path field has text -> POST {path:...} as JSON  (live watch)
+     *    - path field empty    -> open the hidden file picker;
+     *                              the picker's change handler uploads
+     *                              the file as multipart and the server
+     *                              parses it once (no polling).
+     */
+    $("load-btn").addEventListener("click", () => {
         const path = $("path-input").value.trim();
-        if (!path) {
-            setStatus("Please enter a file path.", "error");
-            return;
+        if (path) {
+            loadByPath(path);
+        } else {
+            $("file-picker").click();   // open the native dialog
         }
+    });
+
+    $("file-picker").addEventListener("change", async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        pause();
+        setStatus("Uploading " + file.name + "\u2026", "");
+        const fd = new FormData();
+        fd.append("file", file);
+        try {
+            const r = await fetch("/api/load", { method: "POST", body: fd })
+                            .then(x => x.json());
+            if (!r.ok) {
+                setStatus(r.error || "Upload failed.", "error");
+                return;
+            }
+            // Reflect the upload in the path field so it's clear what
+            // was loaded; prefix tells the user it isn't being polled.
+            $("path-input").value = "(uploaded) " + file.name;
+            state.firstFit = true;
+            applyNewData({
+                mtime:  r.mtime,
+                data:   r.data,
+                format: r.format,
+                label:  r.label,
+            });
+            // Uploaded files are one-shot; skip the polling timer
+            // because the temp file's mtime never advances.
+            if (r.uploaded) {
+                stopPolling();
+            } else {
+                startPolling();
+            }
+        } catch (err) {
+            setStatus("Network error: " + err.message, "error");
+        } finally {
+            // Reset so picking the same file again still fires "change".
+            e.target.value = "";
+        }
+    });
+
+    async function loadByPath(path) {
         pause();
         setStatus("Loading\u2026", "");
         try {
@@ -502,13 +559,18 @@
                 setStatus(r.error || "Load failed.", "error");
                 return;
             }
-            state.firstFit = true;       // re-fit on a fresh structure
-            applyNewData({ mtime: r.mtime, data: r.data });
+            state.firstFit = true;
+            applyNewData({
+                mtime:  r.mtime,
+                data:   r.data,
+                format: r.format,
+                label:  r.label,
+            });
             startPolling();
         } catch (e) {
             setStatus("Network error: " + e.message, "error");
         }
-    });
+    }
 
     $("path-input").addEventListener("keydown", (e) => {
         if (e.key === "Enter") $("load-btn").click();

@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import argparse
 import os
+import tempfile
+import time
 from threading import Lock
 from typing import Any, Dict, Optional, Tuple
 
@@ -36,21 +38,28 @@ from parsers import (
 
 
 app = Flask(__name__)
-# /api/load only takes a JSON path (no file body), so a small content
-# cap is plenty -- this just stops a runaway client from posting a
-# multi-megabyte JSON blob.
-app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024   # 1 MB
+# /api/load accepts EITHER a JSON {"path": "..."} body (live-watching
+# mode) OR a multipart upload (file-picker fallback when the user
+# clicks Load without typing a path).  50 MB is a generous cap for
+# realistic SIESTA / PySCF logs while still bounding memory.
+app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024   # 50 MB
 
 # Single global "current file" state.  A single user / single tab is
 # the expected usage so a plain dict + lock is enough; no need for
 # sessions.
 _lock = Lock()
 _state: Dict[str, Any] = {
-    "path":   None,
-    "mtime":  None,
-    "data":   None,
-    "parser": None,    # the TrajectoryParser class chosen for this file
+    "path":     None,
+    "mtime":    None,
+    "data":     None,
+    "parser":   None,    # the TrajectoryParser class chosen for this file
+    "uploaded": False,   # True when the active file was uploaded via
+                         # the file-picker (one-shot, no live watching)
 }
+
+# Track the last temp file we created from a file-picker upload so
+# we can clean it up when a new upload comes in.
+_last_temp_upload: Optional[str] = None
 
 
 def _refresh_if_changed() -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
@@ -114,6 +123,21 @@ def api_formats():
 
 @app.route("/api/load", methods=["POST"])
 def api_load():
+    """Two body shapes:
+
+      * multipart/form-data with a single file field "file" -- file
+        is saved to a temp file and parsed (one-shot, no live update);
+      * application/json with {"path": "..."} -- server reads the
+        absolute path off disk and polls it for live updates.
+
+    The multipart branch is the file-picker fallback for users who
+    don't want to type an absolute path.
+    """
+    # ---- multipart upload (file-picker mode) -----------------------
+    if "file" in request.files:
+        return _api_load_multipart(request.files["file"])
+
+    # ---- JSON path (live-watch mode) -------------------------------
     body = request.get_json(silent=True) or {}
     path = (body.get("path") or "").strip()
     if not path:
@@ -129,23 +153,88 @@ def api_load():
         return jsonify({"ok": False, "error": str(exc)}), 400
 
     with _lock:
-        _state["path"]   = path
-        _state["mtime"]  = None        # force a re-parse next time
-        _state["data"]   = None
-        _state["parser"] = parser_cls
+        _state["path"]     = path
+        _state["mtime"]    = None      # force a re-parse next time
+        _state["data"]     = None
+        _state["parser"]   = parser_cls
+        _state["uploaded"] = False
 
     state, err = _refresh_if_changed()
     if err:
         return jsonify({"ok": False, "error": err}), 500
-    payload = {
-        "ok":     True,
-        "path":   state["path"],
-        "mtime":  state["mtime"],
-        "format": parser_cls.name,
-        "label":  parser_cls.label,
-        "data":   state["data"],
-    }
-    return jsonify(payload)
+    return jsonify({
+        "ok":       True,
+        "path":     state["path"],
+        "mtime":    state["mtime"],
+        "format":   parser_cls.name,
+        "label":    parser_cls.label,
+        "data":     state["data"],
+        "uploaded": False,
+    })
+
+
+def _api_load_multipart(uploaded_file):
+    """Save the uploaded file to a tempdir, parse, and stash the temp
+    path on _state.  Future /api/data polls work like always but the
+    mtime never advances (we don't write to the temp file again), so
+    the data effectively snapshots at upload time.
+
+    Old temp uploads are cleaned up when a new one comes in -- a
+    process restart drops the rest.
+    """
+    global _last_temp_upload
+
+    if not uploaded_file or not uploaded_file.filename:
+        return jsonify({"ok": False, "error": "Empty filename."}), 400
+
+    # Keep the original suffix (.xyz / .out / .log) so the parser-
+    # detection layer's content sniff isn't fooled by extension-less
+    # names.  Sanitise the basename to dodge path-traversal in the
+    # temp filename itself.
+    safe_name = os.path.basename(uploaded_file.filename) or "upload"
+    tmp_path = os.path.join(
+        tempfile.gettempdir(),
+        f"molwatch_{int(time.time())}_{safe_name}"
+    )
+    try:
+        uploaded_file.save(tmp_path)
+    except OSError as exc:
+        return jsonify({"ok": False,
+                        "error": f"Failed to write upload: {exc}"}), 500
+
+    try:
+        parser_cls = detect_parser(tmp_path)
+    except UnknownFormatError as exc:
+        # Don't keep an unrecognised upload around.
+        try: os.remove(tmp_path)
+        except OSError: pass
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    with _lock:
+        # Clean up any previous upload's temp file.
+        if _last_temp_upload and _last_temp_upload != tmp_path:
+            try: os.remove(_last_temp_upload)
+            except OSError: pass
+        _last_temp_upload = tmp_path
+        _state["path"]     = tmp_path
+        _state["mtime"]    = None
+        _state["data"]     = None
+        _state["parser"]   = parser_cls
+        _state["uploaded"] = True
+
+    state, err = _refresh_if_changed()
+    if err:
+        return jsonify({"ok": False, "error": err}), 500
+    return jsonify({
+        "ok":               True,
+        "path":             tmp_path,
+        "mtime":            state["mtime"],
+        "format":           parser_cls.name,
+        "label":            parser_cls.label,
+        "data":             state["data"],
+        "uploaded":         True,
+        "uploaded_filename": uploaded_file.filename,
+    })
 
 
 @app.route("/api/data")
@@ -159,13 +248,14 @@ def api_data():
         return jsonify({"ok": True, "changed": False, "mtime": state["mtime"]})
     parser_cls = state["parser"]
     return jsonify({
-        "ok":      True,
-        "changed": True,
-        "path":    state["path"],
-        "mtime":   state["mtime"],
-        "format":  parser_cls.name,
-        "label":   parser_cls.label,
-        "data":    state["data"],
+        "ok":       True,
+        "changed":  True,
+        "path":     state["path"],
+        "mtime":    state["mtime"],
+        "format":   parser_cls.name,
+        "label":    parser_cls.label,
+        "data":     state["data"],
+        "uploaded": state.get("uploaded", False),
     })
 
 
