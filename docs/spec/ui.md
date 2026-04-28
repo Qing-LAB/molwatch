@@ -12,13 +12,18 @@ build step — vanilla JS + 3Dmol.js + Plotly.
 * **Header**: app title `molwatch` + tagline `live trajectory viewer
   — SIESTA · PySCF / geomeTRIC`.  Loader bar with: path input, hidden
   file picker, Load button, status span.
-* **Main**: two rows.
+* **Main**: three rows (third is conditional).
   * Row 1 (`.viewer-row`): the 3Dmol viewer + a controls aside
     (Style, Overlays, Playback fieldsets).
   * Row 2 (`.plots-row`): two Plotly canvases (energy vs step, max
     force vs step).
-* Mobile breakpoint at 980 px collapses both rows to single column.
-  640 px tightens header + plot heights.
+  * Row 3 (`.scf-row`, **PySCF-only, hidden by default**): a banner
+    summarising the current geom-opt step + SCF cycle, plus two
+    Plotly canvases (SCF energy + |g| within the current step).
+    Visible iff `state.data.scf_history` is non-empty — i.e. when a
+    PySCF `<job>.log` was found alongside the trajectory.
+* Mobile breakpoint at 980 px collapses every plot row to single
+  column.  640 px tightens header + plot heights.
 
 ## Theme
 

@@ -259,9 +259,43 @@ fieldset .row {
     box-shadow: var(--shadow-card);
 }
 
+/* ---- PySCF SCF-progress panel ---- */
+
+.scf-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 4px;
+}
+.scf-banner {
+    background: var(--bg-card);
+    border: 1px solid var(--border-strong);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius-sm);
+    padding: 8px 14px;
+    font-size: 0.92rem;
+    display: flex;
+    gap: 12px;
+    align-items: baseline;
+    flex-wrap: wrap;
+}
+.scf-banner strong { color: var(--accent); font-weight: 600; }
+.scf-status {
+    color: var(--text-secondary);
+    font-family: ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+}
+.scf-plots {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--gap);
+}
+.scf-plots .plot { height: 240px; }
+
 @media (max-width: 980px) {
     .viewer-row { grid-template-columns: 1fr; }
     .plots-row  { grid-template-columns: 1fr; }
+    .scf-plots  { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {
     .loader input[type="text"] { min-width: 0; flex: 1; }

@@ -388,6 +388,73 @@
             yaxis: { title: "Max |F| (eV/\u00C5)", rangemode: "tozero", zeroline: false },
             font: { family: "system-ui, sans-serif", size: 11 },
         }, { displayModeBar: false, responsive: true });
+
+        renderScfProgress();
+    }
+
+    /*  PySCF-only: render the SCF-iteration progress for the most
+     *  recent geom-opt step.  Hidden when the loaded format has no
+     *  scf_history (SIESTA, or PySCF without its .log alongside the
+     *  trajectory).
+     */
+    function renderScfProgress() {
+        const section = $("scf-section");
+        const history = state.data && state.data.scf_history;
+        if (!history || history.length === 0) {
+            section.hidden = true;
+            return;
+        }
+        section.hidden = false;
+
+        // The most recent SCF run = the geom-opt step that's
+        // currently converging (or just converged).
+        const current = history[history.length - 1];
+        const stepIdx = history.length - 1;
+        const cycles   = current.map(c => c.cycle);
+        const energies = current.map(c => c.energy);
+        const gnorms   = current.map(c => c.gnorm);
+        const lastG    = gnorms[gnorms.length - 1];
+        const lastDe   = current[current.length - 1].delta_E;
+
+        $("scf-status").textContent =
+            "Geom-opt step " + stepIdx
+            + " — SCF cycle " + cycles[cycles.length - 1]
+            + " (" + current.length + " iters)"
+            + ", |g|=" + lastG.toExponential(2) + " eV/Å"
+            + ", ΔE=" + lastDe.toExponential(2) + " eV";
+
+        // SCF energy convergence within the current step.
+        Plotly.react("scf-energy-plot", [{
+            x: cycles,
+            y: energies,
+            mode: "lines+markers",
+            line: { color: "#6ba6ff", width: 1.5 },
+            marker: { size: 5 },
+            name: "E",
+        }], {
+            title: { text: "SCF energy (current step)", font: { size: 12 } },
+            margin: { l: 80, r: 16, t: 32, b: 40 },
+            xaxis: { title: "SCF cycle", dtick: 1, zeroline: false },
+            yaxis: { title: "E (eV)", tickformat: ".4f", zeroline: false },
+            font: { family: "system-ui, sans-serif", size: 10 },
+        }, { displayModeBar: false, responsive: true });
+
+        // |g| spans many decades during SCF -> log y-axis.
+        Plotly.react("scf-gnorm-plot", [{
+            x: cycles,
+            y: gnorms,
+            mode: "lines+markers",
+            line: { color: "#fbbf24", width: 1.5 },
+            marker: { size: 5 },
+            name: "|g|",
+        }], {
+            title: { text: "SCF gradient norm |g|", font: { size: 12 } },
+            margin: { l: 70, r: 16, t: 32, b: 40 },
+            xaxis: { title: "SCF cycle", dtick: 1, zeroline: false },
+            yaxis: { title: "|g| (eV/Å)", type: "log", zeroline: false,
+                     tickformat: ".0e" },
+            font: { family: "system-ui, sans-serif", size: 10 },
+        }, { displayModeBar: false, responsive: true });
     }
 
     /* ------------------------------------------------------------------ */

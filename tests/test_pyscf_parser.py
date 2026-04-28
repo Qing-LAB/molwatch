@@ -132,3 +132,78 @@ def test_qdata_provides_max_forces(tmp_path):
 def test_json_safe(pyscf_traj_path):
     result = PySCFParser.parse(pyscf_traj_path)
     json.dumps(result, allow_nan=False)
+
+
+# --------------------------------------------------------------------- #
+#  scf_history: parse PySCF .log for SCF iteration tables               #
+# --------------------------------------------------------------------- #
+
+
+_SCF_LOG_SAMPLE = """\
+Some PySCF banner noise
+init E= 0.00000
+cycle= 0 E= -100.0  delta_E= 0.00  |g|= 5.0  |ddm|= 1.0
+  HOMO = -0.20  LUMO = -0.10
+cycle= 1 E= -100.5  delta_E= -0.5  |g|= 1.0  |ddm|= 0.3
+  HOMO = -0.21  LUMO = -0.11
+cycle= 2 E= -100.6  delta_E= -0.1  |g|= 0.05 |ddm|= 0.01
+converged SCF energy = -100.6
+some intermediate banner
+cycle= 0 E= -110.0  delta_E= 0.00  |g|= 3.0  |ddm|= 0.5
+cycle= 1 E= -110.4  delta_E= -0.4  |g|= 0.5  |ddm|= 0.05
+cycle= 2 E= -110.5  delta_E= -0.1  |g|= 0.005 |ddm|= 0.001
+converged SCF energy = -110.5
+"""
+
+
+def test_scf_history_parses_two_runs(tmp_path):
+    """Two consecutive SCF runs (one per geom-opt step) produce two
+    entries in scf_history."""
+    traj = tmp_path / "myjob_geom_optim.xyz"
+    traj.write_text(SAMPLE)
+    log  = tmp_path / "myjob.log"          # NOTE: no _geom suffix
+    log.write_text(_SCF_LOG_SAMPLE)
+    result = PySCFParser.parse(str(traj))
+    assert "scf_history" in result
+    runs = result["scf_history"]
+    assert len(runs) == 2
+    assert len(runs[0]) == 3
+    assert len(runs[1]) == 3
+    # Energies in eV (Hartree -> eV via 27.211386...)
+    HA = 27.211386245988
+    assert math.isclose(runs[0][0]["energy"], -100.0 * HA)
+    assert math.isclose(runs[1][2]["energy"], -110.5 * HA)
+
+
+def test_scf_history_units_converted(tmp_path):
+    """gnorm is converted from Ha/Bohr to eV/A; energies from
+    Hartree to eV."""
+    traj = tmp_path / "myjob_geom_optim.xyz"
+    traj.write_text(SAMPLE)
+    log  = tmp_path / "myjob.log"
+    log.write_text(_SCF_LOG_SAMPLE)
+    runs = PySCFParser.parse(str(traj))["scf_history"]
+    HA_BOHR_TO_EV_ANG = 27.211386245988 / 0.5291772108
+    # cycle 0 |g|=5.0 Ha/Bohr -> ... eV/A
+    assert math.isclose(runs[0][0]["gnorm"], 5.0 * HA_BOHR_TO_EV_ANG)
+
+
+def test_scf_history_empty_when_log_absent(pyscf_traj_path):
+    """No <prefix>.log next to the trajectory -> scf_history = []."""
+    result = PySCFParser.parse(pyscf_traj_path)
+    assert result["scf_history"] == []
+
+
+def test_scf_history_per_cycle_keys(tmp_path):
+    """Every entry in a run has the documented keys:
+       cycle, energy, delta_E, gnorm, ddm.
+    """
+    traj = tmp_path / "myjob_geom_optim.xyz"
+    traj.write_text(SAMPLE)
+    log  = tmp_path / "myjob.log"
+    log.write_text(_SCF_LOG_SAMPLE)
+    runs = PySCFParser.parse(str(traj))["scf_history"]
+    expected = {"cycle", "energy", "delta_E", "gnorm", "ddm"}
+    for run in runs:
+        for entry in run:
+            assert set(entry.keys()) == expected

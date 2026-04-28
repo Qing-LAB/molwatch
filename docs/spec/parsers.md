@@ -46,9 +46,39 @@ class TrajectoryParser(ABC):
     "forces":      List[List[List[float]]],      # eV/Ang per atom per step (or [])
     "iterations":  List[int],                    # length matches frames
     "lattice":     Optional[List[List[float]]],  # 3x3 Ang or None
+    "scf_history": List[List[Dict[str, float]]], # see below
     "source_format": str,                        # the parser's `name`
 }
 ```
+
+### `scf_history` schema
+
+Optional per-engine richer progress data.  Each top-level entry is
+one **geom-opt step's SCF run**; each inner entry is one **SCF
+iteration** within that run:
+
+```python
+[
+    [   # geom-opt step 0
+        {"cycle":   int,    # SCF iteration counter (resets per step)
+         "energy":  float,  # eV
+         "delta_E": float,  # eV  (E_cycle - E_prev_cycle)
+         "gnorm":   float,  # eV/Ang  (orbital-gradient norm)
+         "ddm":     float}, # dimensionless  (density-matrix change)
+        ...
+    ],
+    [...],   # step 1
+    ...
+]
+```
+
+`scf_history` may be `[]` when the parser couldn't find a companion
+log file (or when the format doesn't expose per-cycle SCF detail
+yet — e.g. SIESTA today).  Front-end consumers MUST handle the
+empty case gracefully (hide the SCF panel, don't crash).
+
+The most-recent entry (`scf_history[-1]`) is "the current geom-opt
+step's SCF" — what molwatch shows in its live SCF-progress panel.
 
 * All per-step lists must be **index-aligned with `frames`** — the
   JS viewer walks them in lockstep via the slider.
@@ -114,6 +144,17 @@ bug:
   Format: `ENERGY ...` opens a new frame (flush previous frame's
   max-force on close); `GRADIENT g1 g2 ... g_3N` provides the
   components for the current frame's max-force computation.
+
+* Optional companion **PySCF main log** `<job>.log` parser (note
+  the **un-suffixed** name — molbuilder writes the trajectory as
+  `<job>_geom_optim.xyz` but the PySCF main log as `<job>.log`).
+  When present, `scf_history` is populated from the per-cycle
+  table lines `cycle= N E= ... delta_E= ... |g|= ... |ddm|= ...`,
+  one inner list per geom-opt step's SCF run (split on
+  `converged SCF energy = ...` or `cycle= 0` boundaries).
+  Energies are converted to eV, gradient norms to eV/Å for cross-
+  format consistency.  When the log is absent or unreadable,
+  `scf_history` is the empty list.
 
 ## Registry contract (`parsers/__init__.py`)
 

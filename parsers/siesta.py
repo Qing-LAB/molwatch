@@ -190,5 +190,10 @@ class SiestaParser(TrajectoryParser):
             "energies":      energies,
             "max_forces":    max_forces,
             "forces":        forces_per_frame,
+            "scf_history":   [],   # SIESTA's scf table is parsed at the
+                                   # CG-step level (energies above);
+                                   # per-cycle SCF detail isn't surfaced
+                                   # yet -- placeholder so the front-end
+                                   # can rely on the key existing.
             "source_format": cls.name,
         }

@@ -41,6 +41,24 @@ _COMMENT_RE = re.compile(
 )
 
 
+# Matches a PySCF SCF iteration line, e.g.:
+#   cycle= 1 E= -5005.99362145001  delta_E= 33.1  |g|= 13.4  |ddm|= 23.1
+_SCF_LINE_RE = re.compile(
+    r"cycle\s*=\s*(\d+)\s+"
+    r"E\s*=\s*(-?[\d.eE+-]+)\s+"
+    r"delta_E\s*=\s*(-?[\d.eE+-]+)\s+"
+    r"\|g\|\s*=\s*([\d.eE+-]+)\s+"
+    r"\|ddm\|\s*=\s*([\d.eE+-]+)"
+)
+
+# "converged SCF energy = ..." marks the end of one SCF run (one
+# geom-opt step's electronic problem).  Used to delimit run boundaries
+# robustly even when cycle= 0 also appears in mid-run extra-cycle blocks.
+_SCF_CONVERGED_RE = re.compile(
+    r"converged SCF energy\s*=\s*(-?[\d.eE+-]+)"
+)
+
+
 class PySCFParser(TrajectoryParser):
     name  = "pyscf"
     label = "PySCF / geomeTRIC trajectory"
@@ -127,6 +145,12 @@ class PySCFParser(TrajectoryParser):
         # `<prefix>_optim.xyz`.  Same prefix, so derive it:
         max_forces = cls._read_qdata_forces(path, len(frames))
 
+        # PySCF's main .log has the SCF iteration tables (one block per
+        # geom-opt step's electronic problem).  Surface this as
+        # scf_history so molwatch can show progress within the current
+        # geom-opt step.
+        scf_history = cls._read_scf_history(path)
+
         return {
             "frames":        frames,
             "lattice":       None,            # geomeTRIC traj has no cell
@@ -134,6 +158,7 @@ class PySCFParser(TrajectoryParser):
             "energies":      energies,
             "max_forces":    max_forces,
             "forces":        [[] for _ in frames],
+            "scf_history":   scf_history,
             "source_format": cls.name,
         }
 
@@ -203,3 +228,86 @@ class PySCFParser(TrajectoryParser):
         if len(max_forces) < n_frames:
             max_forces.extend([None] * (n_frames - len(max_forces)))
         return max_forces[:n_frames]
+
+    # ------------------------------------------------------------- #
+    #  PySCF-log SCF-iteration helper                                #
+    # ------------------------------------------------------------- #
+    @classmethod
+    def _read_scf_history(cls, traj_path: str) -> List[List[Dict[str, float]]]:
+        """Try ``<prefix>.log`` next to the trajectory.
+
+        Returns a list of SCF runs, where each run is a list of
+        per-cycle dicts:
+
+            [
+              [   # geom-opt step 0
+                {"cycle": 0, "energy": <eV>, "delta_E": <eV>,
+                 "gnorm":  <eV/Ang>, "ddm": <dimensionless>},
+                ...
+              ],
+              [...],   # step 1
+              ...
+            ]
+
+        molwatch uses the LAST entry as "the current step's SCF" --
+        it's the one most useful for live monitoring.
+
+        Returns an empty list if the .log file isn't present (or
+        can't be opened); the front-end then hides the SCF-progress
+        panel.
+
+        Filename derivation:
+          * traj is `<base>_geom_optim.xyz` (molbuilder convention)
+          * pyscf log is `<base>.log` (no `_geom`)
+        We strip the suffix(es) accordingly.
+        """
+        base, fname = os.path.split(traj_path)
+        stem = fname
+        if stem.endswith("_optim.xyz"):
+            stem = stem[: -len("_optim.xyz")]
+        if stem.endswith("_geom"):
+            stem = stem[: -len("_geom")]
+        log_path = os.path.join(base, stem + ".log")
+        if not os.path.isfile(log_path):
+            return []
+
+        runs: List[List[Dict[str, float]]] = []
+        current: List[Dict[str, float]] = []
+
+        try:
+            with open(log_path, "r", errors="replace") as fh:
+                for raw in fh:
+                    m = _SCF_LINE_RE.search(raw)
+                    if m:
+                        cycle, e, de, g, ddm = m.groups()
+                        cy = int(cycle)
+                        # New SCF run boundary: cycle resets to a small
+                        # number after a converged-or-extra-cycle line.
+                        # We use _SCF_CONVERGED_RE to mark boundaries
+                        # explicitly below; here we just build the list.
+                        if cy == 0 and current:
+                            runs.append(current)
+                            current = []
+                        try:
+                            current.append({
+                                "cycle":   cy,
+                                "energy":  float(e)  * _HARTREE_TO_EV,
+                                "delta_E": float(de) * _HARTREE_TO_EV,
+                                "gnorm":   float(g)  * _HA_BOHR_TO_EV_ANG,
+                                "ddm":     float(ddm),
+                            })
+                        except ValueError:
+                            continue
+                    elif _SCF_CONVERGED_RE.search(raw):
+                        # End of an SCF run.  Flush only if we
+                        # collected anything; consecutive converged
+                        # lines without intervening cycles can happen
+                        # in pathological logs.
+                        if current:
+                            runs.append(current)
+                            current = []
+                if current:
+                    runs.append(current)
+        except OSError:
+            return []
+        return runs

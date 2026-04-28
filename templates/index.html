@@ -108,6 +108,21 @@ and click Load to pick a file (one-shot view, no live updates).">
     <div id="energy-plot" class="plot"></div>
     <div id="force-plot" class="plot"></div>
   </section>
+
+  <!-- PySCF-only section: SCF-iteration progress for the most recent
+       geom-opt step.  Hidden when the loaded file has no scf_history
+       (e.g. SIESTA, or the PySCF .log isn't sitting next to the
+       trajectory). -->
+  <section class="scf-row" id="scf-section" hidden>
+    <div class="scf-banner">
+      <strong>PySCF SCF progress</strong>
+      <span id="scf-status" class="scf-status"></span>
+    </div>
+    <div class="scf-plots">
+      <div id="scf-energy-plot" class="plot"></div>
+      <div id="scf-gnorm-plot"  class="plot"></div>
+    </div>
+  </section>
 </main>
 
 <script src="{{ url_for('static', filename='viewer.js') }}"></script>
