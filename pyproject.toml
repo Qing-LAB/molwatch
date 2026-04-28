@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "moldyn_view"
+version = "0.1.0"
+description = "Live trajectory viewer for SIESTA / PySCF / future codes."
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "Quan Qing", email = "qqing@asu.edu" }]
+license = { text = "MIT" }
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+dependencies = [
+    "flask>=3.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7",
+    "pyflakes>=3",
+]
+
+[tool.setuptools]
+py-modules = ["app"]
+
+[tool.setuptools.packages.find]
+include = ["parsers*"]
+
+[tool.setuptools.package-data]
+"*" = ["templates/*.html", "static/*.css", "static/*.js"]
+
+[tool.pytest.ini_options]
+minversion   = "7.0"
+testpaths    = ["tests"]
+pythonpath   = ["."]
+addopts      = "-ra"

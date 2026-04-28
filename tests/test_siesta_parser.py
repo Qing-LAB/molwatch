@@ -1,28 +1,26 @@
-"""Sanity check for siesta_parser.parse_siesta_output().
+"""Sanity check for the SIESTA output parser.
 
 Builds a tiny synthetic SIESTA-style output that contains the same
 markers as the real thing -- two complete CG steps plus a truncated
 third step that is mid-writing its outcoor block -- and verifies that
 the parser keeps two complete steps with the right numbers.
-
-Run:
-    python test_parser.py
 """
+
+from __future__ import annotations
 
 import json
 import math
-import os
-import tempfile
 
-from siesta_parser import parse_siesta_output
+import pytest
+
+from parsers.siesta import SiestaParser
 
 
 SAMPLE = """\
-Some header noise that should be ignored.
+Welcome to SIESTA -- some header noise
 redata: Max. number of TDED Iter        =        1
 redata: Max. number of SCF Iter                     =      500
 redata: Maximum number of optimization moves        =      200
-No. of atoms with KB's overlaping orbs in proc 0. Max # of overlaps:      84     159
 
                      ====================================
                         Begin CG opt. move =      0
@@ -37,12 +35,7 @@ outcell: Unit cell vectors (Ang):
         0.000000   10.000000    0.000000
         0.000000    0.000000   10.000000
 
-outcell: Cell vector modules (Ang)   :   10.0  10.0  10.0
-outcell: Cell volume (Ang**3)        :  1000.0
-
 siesta: Eharris =   -289239.010387
-siesta: Etot    =   -290967.213964
-siesta: FreeEng =   -290967.445028
 
    scf:    1  -100.0  -100.0  -100.0  0.001 -1.0 0.5
 SCF Convergence by DM+H criterion
@@ -92,67 +85,81 @@ siesta: Atomic forces (eV/Ang):
 
 outcoor: Atomic coordinates (Ang):
    1.20000000    2.20000000    3.20000000   1       1  C
-"""  # NB: third step truncated mid-coords -- should be discarded.
+"""
 
 
-def main() -> None:
-    tmp = tempfile.NamedTemporaryFile(
-        "w", suffix=".out", delete=False, encoding="utf-8"
-    )
-    try:
-        tmp.write(SAMPLE)
-        tmp.close()
-        result = parse_siesta_output(tmp.name)
-    finally:
-        os.unlink(tmp.name)
+@pytest.fixture
+def siesta_path(tmp_path):
+    p = tmp_path / "run.out"
+    p.write_text(SAMPLE)
+    return str(p)
 
-    frames     = result["frames"]
-    energies   = result["energies"]
-    max_forces = result["max_forces"]
-    lattice    = result["lattice"]
 
-    # --- frames ---------------------------------------------------------
-    assert len(frames) == 2, f"expected 2 complete frames, got {len(frames)}"
-    assert frames[0] == [
+def test_can_parse(siesta_path):
+    assert SiestaParser.can_parse(siesta_path) is True
+
+
+def test_can_parse_rejects_non_siesta(tmp_path):
+    p = tmp_path / "garbage.txt"
+    p.write_text("just some random text\nhello world\n")
+    assert SiestaParser.can_parse(str(p)) is False
+
+
+def test_torn_frame_dropped_at_eof(siesta_path):
+    result = SiestaParser.parse(siesta_path)
+    assert len(result["frames"]) == 2
+
+
+def test_frame_coordinates(siesta_path):
+    result = SiestaParser.parse(siesta_path)
+    assert result["frames"][0] == [
         ["C", 1.0, 2.0, 3.0],
         ["H", 4.0, 5.0, 6.0],
-    ], frames[0]
-    assert frames[1] == [
+    ]
+    assert result["frames"][1] == [
         ["C", 1.1, 2.1, 3.1],
         ["H", 4.1, 5.1, 6.1],
-    ], frames[1]
+    ]
 
-    # --- energies / forces ---------------------------------------------
-    assert math.isclose(energies[0],   -100.1234)
-    assert math.isclose(energies[1],   -101.5678)
-    assert math.isclose(max_forces[0], 1.234567)   # not the constrained one
-    assert math.isclose(max_forces[1], 0.987654)
 
-    # --- per-atom forces -----------------------------------------------
-    forces = result["forces"]
-    assert len(forces) == 2
-    assert forces[0] == [[0.10, 0.20, 0.30], [0.40, 0.50, 0.60]]
-    assert forces[1] == [[0.05, 0.06, 0.07], [0.08, 0.09, 0.10]]
+def test_energies(siesta_path):
+    result = SiestaParser.parse(siesta_path)
+    assert math.isclose(result["energies"][0], -100.1234)
+    assert math.isclose(result["energies"][1], -101.5678)
 
-    # --- lattice -------------------------------------------------------
-    assert lattice == [
+
+def test_max_forces_skip_constrained_line(siesta_path):
+    result = SiestaParser.parse(siesta_path)
+    assert math.isclose(result["max_forces"][0], 1.234567)
+    assert math.isclose(result["max_forces"][1], 0.987654)
+
+
+def test_per_atom_forces(siesta_path):
+    result = SiestaParser.parse(siesta_path)
+    assert result["forces"][0] == [[0.10, 0.20, 0.30], [0.40, 0.50, 0.60]]
+    assert result["forces"][1] == [[0.05, 0.06, 0.07], [0.08, 0.09, 0.10]]
+
+
+def test_lattice_captured(siesta_path):
+    result = SiestaParser.parse(siesta_path)
+    assert result["lattice"] == [
         [10.0,  0.0,  0.0],
         [ 0.0, 10.0,  0.0],
         [ 0.0,  0.0, 10.0],
-    ], lattice
+    ]
 
-    # --- iterations ---
+
+def test_iterations(siesta_path):
+    result = SiestaParser.parse(siesta_path)
     assert result["iterations"] == [0, 1]
 
-    # --- JSON safety: result must serialise with strict JSON (no NaN) ---
+
+def test_source_format_tag(siesta_path):
+    result = SiestaParser.parse(siesta_path)
+    assert result["source_format"] == "siesta"
+
+
+def test_json_safe_no_nan(siesta_path):
+    """Result must serialise with strict JSON (no NaN)."""
+    result = SiestaParser.parse(siesta_path)
     json.dumps(result, allow_nan=False)
-
-    print("OK -- parser produced:")
-    print(f"  frames       : {len(frames)}")
-    print(f"  energies     : {energies}")
-    print(f"  max_forces   : {max_forces}")
-    print(f"  lattice      : {lattice}")
-
-
-if __name__ == "__main__":
-    main()

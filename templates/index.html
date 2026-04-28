@@ -2,17 +2,22 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>SIESTA live viewer</title>
+<title>moldyn_view &mdash; live trajectory viewer</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-<script src="https://3Dmol.org/build/3Dmol-min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.1.0/3Dmol-min.js"></script>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 </head>
 <body>
 <header>
-  <h1>SIESTA live viewer</h1>
+  <h1>
+    moldyn_view
+    <span class="tag">live trajectory viewer &mdash; SIESTA &middot; PySCF / geomeTRIC</span>
+  </h1>
   <div class="loader">
     <label for="path-input">Output file:</label>
-    <input id="path-input" type="text" placeholder="/abs/path/to/run.out" size="60" autofocus>
+    <input id="path-input" type="text"
+           placeholder="/abs/path/to/run.out  or  /abs/path/to/job_geom_optim.xyz"
+           size="60" autofocus>
     <button id="load-btn">Load</button>
     <span id="status" class="status">No file loaded.</span>
   </div>
@@ -75,10 +80,10 @@
       <fieldset>
         <legend>Playback</legend>
         <div class="row">
-          <button id="play">▶ Play</button>
-          <button id="pause">⏸ Pause</button>
-          <button id="prev">‹</button>
-          <button id="next">›</button>
+          <button id="play">&#9654; Play</button>
+          <button id="pause">&#9208; Pause</button>
+          <button id="prev">&lsaquo;</button>
+          <button id="next">&rsaquo;</button>
         </div>
         <label>Frame <span id="frame-idx">0</span> / <span id="frame-tot">0</span>
           <input id="frame-slider" type="range" min="0" max="0" value="0" step="1">

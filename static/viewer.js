@@ -406,7 +406,8 @@
             }
             if (!r.changed) {
                 setStatus(
-                    "Up to date \u2014 " + state.data.frames.length + " frames "
+                    "Up to date \u2014 " + state.data.frames.length
+                    + " " + (state.label || "") + " frames "
                     + "(checked " + new Date().toLocaleTimeString() + ").",
                     "ok"
                 );
@@ -422,12 +423,14 @@
         const wasAtEnd = !state.data
             || state.currentFrame >= state.data.frames.length - 1;
 
-        state.mtime = r.mtime;
-        state.data  = r.data;
+        state.mtime  = r.mtime;
+        state.data   = r.data;
+        state.format = r.format || (r.data && r.data.source_format) || "?";
+        state.label  = r.label  || state.format;
 
         const n = state.data.frames.length;
         if (n === 0) {
-            setStatus("File loaded but no frames yet.", "");
+            setStatus("File loaded ("+ state.label +") but no frames yet.", "");
             return;
         }
         $("frame-tot").textContent = n - 1;
@@ -440,7 +443,7 @@
 
         const ts = new Date(r.mtime * 1000).toLocaleTimeString();
         setStatus(
-            "Loaded " + n + " frames \u2014 file mtime " + ts + ".",
+            "Loaded " + n + " " + state.label + " frames \u2014 mtime " + ts + ".",
             "ok"
         );
     }

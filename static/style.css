@@ -1,26 +1,76 @@
-/* Minimal, scientific look: white surfaces, neutral grey chrome.       */
+/* moldyn_view -- dark theme, matching molbuilder.
+ *
+ * Single :root block for colours so a future light theme is one
+ * variable rewrite away.  Subtle surfaces, no decorative gradients.
+ */
+
+:root {
+    --bg-page:        #14171c;
+    --bg-card:        #1d2128;
+    --bg-card-hover:  #232831;
+    --bg-input:       #262b33;
+    --bg-input-focus: #2c323b;
+    --bg-fieldset:    #1f242c;
+
+    --border-strong:  #3a3f48;
+    --border-soft:    #2c313a;
+
+    --text-primary:   #e6e9ef;
+    --text-secondary: #a8aebb;
+    --text-muted:     #6c7280;
+    --text-mono:      #b8c4d6;
+
+    --accent:         #6ba6ff;
+    --accent-hover:   #8ab8ff;
+    --accent-strong:  #4a8de0;
+    --accent-bg:      rgba(107, 166, 255, 0.10);
+    --accent-glow:    rgba(107, 166, 255, 0.25);
+    --success:        #4ade80;
+    --error:          #f87171;
+    --warning:        #fbbf24;
+
+    --radius:         7px;
+    --radius-sm:      4px;
+    --gap:            14px;
+    --shadow-card:    0 1px 0 rgba(255, 255, 255, 0.02) inset,
+                      0 4px 12px rgba(0, 0, 0, 0.30);
+}
 
 * { box-sizing: border-box; }
 
 body {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
-                 system-ui, sans-serif;
-    color: #1c1c1c;
-    background: #f6f7f8;
+                 system-ui, "Inter", sans-serif;
+    color: var(--text-primary);
+    background: var(--bg-page);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
 }
 
+/* ---- Header / loader bar ---- */
+
 header {
-    padding: 12px 18px;
-    border-bottom: 1px solid #e3e3e3;
-    background: #fff;
+    padding: 14px 22px 12px;
+    border-bottom: 1px solid var(--border-strong);
+    background: linear-gradient(180deg,
+                                rgba(107, 166, 255, 0.05) 0%,
+                                rgba(107, 166, 255, 0.00) 100%),
+                var(--bg-card);
 }
 
 header h1 {
     margin: 0 0 8px;
-    font-size: 1.05rem;
+    font-size: 1.15rem;
     font-weight: 600;
-    letter-spacing: 0.01em;
+    letter-spacing: -0.005em;
+    color: var(--text-primary);
+}
+header h1 .tag {
+    font-weight: 400;
+    color: var(--text-muted);
+    font-size: 0.85em;
+    margin-left: 8px;
 }
 
 .loader {
@@ -29,104 +79,198 @@ header h1 {
     flex-wrap: wrap;
     align-items: center;
 }
-.loader label { font-size: 0.92rem; color: #444; }
+.loader label {
+    font-size: 0.92rem;
+    color: var(--text-secondary);
+}
 .loader input[type="text"] {
-    padding: 5px 8px;
+    padding: 5px 10px;
     font: inherit;
-    border: 1px solid #ccc;
-    border-radius: 4px;
+    color: var(--text-primary);
+    background: var(--bg-input);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
     min-width: 380px;
+    transition: border-color 120ms, background 120ms, box-shadow 120ms;
+}
+.loader input[type="text"]:hover { border-color: var(--accent-strong); }
+.loader input[type="text"]:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: var(--bg-input-focus);
+    box-shadow: 0 0 0 3px var(--accent-glow);
 }
 .loader button {
-    padding: 5px 14px;
+    padding: 5px 16px;
     font: inherit;
     cursor: pointer;
-    border: 1px solid #888;
-    background: #fff;
-    border-radius: 4px;
+    color: #fff;
+    background: var(--accent-strong);
+    border: 1px solid var(--accent-strong);
+    border-radius: var(--radius-sm);
+    transition: background 120ms, border-color 120ms;
 }
-.loader button:hover { background: #eee; }
+.loader button:hover { background: var(--accent); border-color: var(--accent); }
 
-.status { color: #555; font-size: 0.88rem; margin-left: 4px; }
-.status.error { color: #b21515; }
-.status.ok { color: #1d7a3a; }
+.status {
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+    margin-left: 4px;
+}
+.status.error { color: var(--error); }
+.status.ok    { color: var(--success); }
+
+/* ---- Main layout ---- */
 
 main {
-    padding: 12px 18px 24px;
+    padding: var(--gap) 22px 22px;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--gap);
 }
 
 .viewer-row {
     display: grid;
-    grid-template-columns: 1fr 270px;
-    gap: 14px;
+    grid-template-columns: minmax(0, 1fr) 280px;
+    gap: var(--gap);
     min-height: 540px;
 }
 
 #viewer {
     width: 100%;
     height: 540px;
-    border: 1px solid #d8d8d8;
-    background: #fff;
+    border: 1px solid var(--border-strong);
+    background: #fff;            /* viewer canvas keeps white for clarity */
     position: relative;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     overflow: hidden;
+    box-shadow: var(--shadow-card);
 }
 
 .controls { display: flex; flex-direction: column; gap: 10px; }
 
+/* ---- Form controls (shared) ---- */
+
+input[type="text"],
+input[type="number"],
+select {
+    font: inherit;
+    color: var(--text-primary);
+    background: var(--bg-input);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 4px 8px;
+    transition: border-color 120ms, background 120ms, box-shadow 120ms;
+}
+input:hover:not([type="checkbox"]):not([type="range"]),
+select:hover {
+    border-color: var(--accent-strong);
+}
+input:focus, select:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: var(--bg-input-focus);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+}
+input[type="checkbox"] {
+    accent-color: var(--accent);
+    margin-right: 4px;
+    cursor: pointer;
+}
+input[type="range"] {
+    accent-color: var(--accent);
+    width: 100%;
+    background: transparent;
+}
+
+button {
+    font: inherit;
+    cursor: pointer;
+    color: var(--text-primary);
+    background: var(--bg-input);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 4px 12px;
+    transition: background 120ms, border-color 120ms;
+}
+button:hover { background: var(--bg-card-hover); border-color: var(--accent-strong); }
+button:disabled {
+    color: var(--text-muted);
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* ---- Fieldsets ---- */
+
 fieldset {
-    border: 1px solid #d8d8d8;
-    border-radius: 6px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
     padding: 6px 12px 10px;
-    background: #fff;
+    background: var(--bg-fieldset);
+    min-width: 0;
 }
 fieldset legend {
     font-weight: 600;
-    padding: 0 4px;
-    font-size: 0.88rem;
-    color: #333;
+    padding: 0 6px;
+    font-size: 0.85rem;
+    color: var(--accent);
+    letter-spacing: 0.01em;
 }
 fieldset label {
-    display: block;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
     margin: 6px 0;
-    font-size: 0.86rem;
-    color: #444;
-}
-fieldset select,
-fieldset input[type="number"],
-fieldset input[type="range"] {
-    width: 100%;
-    margin-top: 2px;
-    font: inherit;
-}
-fieldset .row { display: flex; gap: 6px; margin: 4px 0; }
-fieldset button {
-    padding: 4px 10px;
-    cursor: pointer;
-    border: 1px solid #888;
-    background: #fff;
-    border-radius: 3px;
-    font: inherit;
     font-size: 0.85rem;
+    color: var(--text-secondary);
+    min-width: 0;
 }
-fieldset button:hover { background: #eee; }
+fieldset label > input,
+fieldset label > select {
+    width: 100%;
+    margin-top: 1px;
+}
+fieldset label:has(> input[type="checkbox"]) {
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+}
+fieldset .row {
+    display: flex; gap: 6px; margin: 4px 0;
+    flex-wrap: wrap;
+}
+
+/* ---- Plots row ---- */
 
 .plots-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 14px;
+    gap: var(--gap);
 }
 .plot {
     height: 320px;
-    border: 1px solid #d8d8d8;
-    background: #fff;
-    border-radius: 4px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-card);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-card);
 }
 
 @media (max-width: 980px) {
     .viewer-row { grid-template-columns: 1fr; }
     .plots-row  { grid-template-columns: 1fr; }
 }
+@media (max-width: 640px) {
+    .loader input[type="text"] { min-width: 0; flex: 1; }
+    main, header { padding-left: 12px; padding-right: 12px; }
+}
+
+/* ---- Scrollbars ---- */
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 5px;
+    border: 2px solid var(--bg-page);
+}
+::-webkit-scrollbar-thumb:hover { background: #4a5160; }
