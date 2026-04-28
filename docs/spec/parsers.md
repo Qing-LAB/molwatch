@@ -189,6 +189,15 @@ cosmetic; whitespace-split + position is what the parser uses.
 * **Engine fallback**: if the `# engine: <name>` header is absent,
   `source_format` defaults to `"molwatch"` so the result still has
   a non-null string.
+* **Initial-state preview** (`kind: initial_preview` line inside a
+  block): a special block that carries coordinates only, with
+  `energy (eV): None`, an empty `forces` section, and an empty
+  `scf_history`.  Emitted by molbuilder *before* the engine has
+  produced any data, so molwatch can render the molecular structure
+  immediately on load.  The parser treats it like any other block
+  (frame is captured, energies/forces become `None`); the UI shows
+  the geometry but plots a gap on the energy / max-force charts at
+  that index.  Subsequent real opt-step blocks fill in the data.
 
 ### `scf_history` keys
 

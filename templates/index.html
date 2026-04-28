@@ -16,10 +16,19 @@
   <div class="loader">
     <label for="path-input">Output file:</label>
     <input id="path-input" type="text"
-           placeholder="/abs/path/to/run.out  or  /abs/path/to/job_geom_optim.xyz"
+           placeholder="/abs/path/to/job.molwatch.log  or  /abs/path/to/run.out"
            size="60" autofocus
            title="Type an absolute path for live polling, or leave empty
-and click Load to pick a file (one-shot view, no live updates).">
+and click Load to pick a file (one-shot view, no live updates).
+
+Preferred for molbuilder-generated runs:
+  <job>.molwatch.log  -- single-file unified log; for PySCF runs
+                         it streams every opt step, for SIESTA runs
+                         it carries an initial-geometry preview.
+
+Engine-native files (also supported):
+  run.out  /  siesta.log         -- SIESTA's main output
+  <job>_geom_optim.xyz           -- geomeTRIC's streaming trajectory">
     <!-- Hidden file picker; shown only when Load is clicked with an
          empty path-input.  Picker-selected files are uploaded as
          multipart and parsed once (no polling, since the browser
