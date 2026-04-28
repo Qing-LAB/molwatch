@@ -104,22 +104,29 @@ def test_max_forces_none_without_qdata(pyscf_traj_path):
 
 def test_qdata_provides_max_forces(tmp_path):
     """If <prefix>.qdata sits next to <prefix>_optim.xyz, parse it for
-    per-step max-force values."""
+    per-step max-force values.  Convention is per-atom |F| (matches
+    SIESTA's 'Max' line) so plots overlay across formats sensibly,
+    NOT max scalar gradient component.
+    """
     traj = tmp_path / "myjob_geom_optim.xyz"
     traj.write_text(SAMPLE)
     qdata = tmp_path / "myjob_geom.qdata.txt"
     qdata.write_text(
         "ENERGY -76.4267520\n"
+        # 3 atoms x 3 components = 9 values per frame.
         "GRADIENT 0.001 0.002 0.003 0.004 0.005 0.006 0.007 0.008 0.009\n"
         "ENERGY -76.4301234\n"
         "GRADIENT 0.0005 0.0006 0.0007 0.0008 0.0009 0.0010 0.0011 0.0012 0.0013\n"
     )
     result = PySCFParser.parse(str(traj))
-    # Max gradient component for frame 0 is 0.009 Ha/Bohr ~ 0.463 eV/A
+    # Per-atom |F| for frame 0:
+    #   atom1 = sqrt(0.001^2+0.002^2+0.003^2) ~= 0.003742
+    #   atom2 = sqrt(0.004^2+0.005^2+0.006^2) ~= 0.008775
+    #   atom3 = sqrt(0.007^2+0.008^2+0.009^2) ~= 0.013928   <- max
+    expected = math.sqrt(0.007**2 + 0.008**2 + 0.009**2)
+    expected *= 27.211386245988 / 0.5291772108     # Ha/Bohr -> eV/Ang
     assert result["max_forces"][0] is not None
-    assert math.isclose(result["max_forces"][0],
-                        0.009 * 27.211386245988 / 0.5291772108,
-                        rel_tol=1e-6)
+    assert math.isclose(result["max_forces"][0], expected, rel_tol=1e-6)
 
 
 def test_json_safe(pyscf_traj_path):

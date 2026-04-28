@@ -36,6 +36,10 @@ from parsers import (
 
 
 app = Flask(__name__)
+# /api/load only takes a JSON path (no file body), so a small content
+# cap is plenty -- this just stops a runaway client from posting a
+# multi-megabyte JSON blob.
+app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024   # 1 MB
 
 # Single global "current file" state.  A single user / single tab is
 # the expected usage so a plain dict + lock is enough; no need for

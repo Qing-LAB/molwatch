@@ -21,6 +21,7 @@ pull the maximum force per step from there (Hartree/Bohr -> eV/Ang).
 
 from __future__ import annotations
 
+import math
 import os
 import re
 from typing import Any, Dict, List, Optional
@@ -175,14 +176,22 @@ class PySCFParser(TrajectoryParser):
                         in_frame = True
                         step_max = None
                     elif s.startswith("GRADIENT"):
-                        # GRADIENT line lists all 3N components.
+                        # GRADIENT line lists 3N gradient components in
+                        # Hartree/Bohr.  Convention compatibility: SIESTA's
+                        # "Max" is the largest per-atom force MAGNITUDE
+                        # (sqrt(fx^2+fy^2+fz^2)), not the largest scalar
+                        # component.  Match it here so the energy/force
+                        # plots overlay sensibly across formats.
                         try:
-                            comps = [abs(float(x)) for x in s.split()[1:]]
+                            comps = [float(x) for x in s.split()[1:]]
                         except ValueError:
                             continue
-                        if comps:
-                            # |F|_max in Ha/Bohr -> eV/Ang
-                            step_max = max(comps) * _HA_BOHR_TO_EV_ANG
+                        if len(comps) >= 3:
+                            per_atom = (
+                                math.sqrt(comps[i]**2 + comps[i+1]**2 + comps[i+2]**2)
+                                for i in range(0, len(comps) - 2, 3)
+                            )
+                            step_max = max(per_atom) * _HA_BOHR_TO_EV_ANG
                 if in_frame:
                     max_forces.append(step_max)
         except OSError:
