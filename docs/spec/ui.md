@@ -17,11 +17,18 @@ build step — vanilla JS + 3Dmol.js + Plotly.
     (Style, Overlays, Playback fieldsets).
   * Row 2 (`.plots-row`): two Plotly canvases (energy vs step, max
     force vs step).
-  * Row 3 (`.scf-row`, **PySCF-only, hidden by default**): a banner
-    summarising the current geom-opt step + SCF cycle, plus two
-    Plotly canvases (SCF energy + |g| within the current step).
-    Visible iff `state.data.scf_history` is non-empty — i.e. when a
-    PySCF `<job>.log` was found alongside the trajectory.
+  * Row 3 (`.scf-row`, **engine-agnostic, hidden when empty**): a
+    banner summarising the current opt step + SCF cycle, plus two
+    Plotly canvases (SCF energy + a residual within the current
+    step).  Visible iff `state.data.scf_history` is non-empty.
+    Both engines populate this row via the same `scf_history`
+    schema; the UI selects the residual key + axis label by
+    engine:
+    * PySCF: residual = `|g|` (eV/Å), step label = "Geom-opt step".
+    * SIESTA: residual = `dHmax` (eV), step label = "CG/MD step".
+    Selection is data-driven (key sniff on `scf_history[-1][0]`),
+    not on `state.format`, so future parsers that expose either
+    set of keys work without UI changes.
 * Mobile breakpoint at 980 px collapses every plot row to single
   column.  640 px tightens header + plot heights.
 

@@ -392,10 +392,12 @@
         renderScfProgress();
     }
 
-    /*  PySCF-only: render the SCF-iteration progress for the most
-     *  recent geom-opt step.  Hidden when the loaded format has no
-     *  scf_history (SIESTA, or PySCF without its .log alongside the
-     *  trajectory).
+    /*  Render the SCF-iteration progress for the most recent step.
+     *  Engine-agnostic: works for PySCF (gnorm/ddm) and SIESTA
+     *  (dHmax/dDmax) by checking which keys are present in the
+     *  per-cycle dicts.  Hidden when scf_history is empty (e.g.
+     *  PySCF without its .log alongside the trajectory, or any
+     *  format that doesn't surface per-cycle SCF detail).
      */
     function renderScfProgress() {
         const section = $("scf-section");
@@ -406,22 +408,47 @@
         }
         section.hidden = false;
 
-        // The most recent SCF run = the geom-opt step that's
-        // currently converging (or just converged).
-        const current = history[history.length - 1];
-        const stepIdx = history.length - 1;
+        // The most recent SCF run = the step currently converging
+        // (or just converged).
+        const current  = history[history.length - 1];
+        const stepIdx  = history.length - 1;
         const cycles   = current.map(c => c.cycle);
         const energies = current.map(c => c.energy);
-        const gnorms   = current.map(c => c.gnorm);
-        const lastG    = gnorms[gnorms.length - 1];
-        const lastDe   = current[current.length - 1].delta_E;
 
-        $("scf-status").textContent =
-            "Geom-opt step " + stepIdx
+        // Pick the residual: prefer PySCF's |g|, fall back to
+        // SIESTA's dHmax.  Both decrease toward 0 during convergence
+        // and look natural on a log y-axis.
+        let residual, residualName, residualUnit, residualColor;
+        if (current[0].gnorm !== undefined) {
+            residual      = current.map(c => c.gnorm);
+            residualName  = "|g|";
+            residualUnit  = "eV/Å";
+            residualColor = "#fbbf24";   // amber
+        } else if (current[0].dHmax !== undefined) {
+            residual      = current.map(c => c.dHmax);
+            residualName  = "dHmax";
+            residualUnit  = "eV";
+            residualColor = "#4ade80";   // green
+        } else {
+            residual = null;
+        }
+
+        // Status banner: step, current cycle, residual, ΔE.  Engine
+        // label distinguishes "Geom-opt step" (PySCF) from "CG/MD step"
+        // (SIESTA) for clarity.
+        const stepLabel = (state.format === "siesta")
+            ? "CG/MD step" : "Geom-opt step";
+        const lastDe = current[current.length - 1].delta_E;
+        let statusText = stepLabel + " " + stepIdx
             + " — SCF cycle " + cycles[cycles.length - 1]
-            + " (" + current.length + " iters)"
-            + ", |g|=" + lastG.toExponential(2) + " eV/Å"
-            + ", ΔE=" + lastDe.toExponential(2) + " eV";
+            + " (" + current.length + " iters)";
+        if (residual !== null) {
+            const lastResid = residual[residual.length - 1];
+            statusText += ", " + residualName + "="
+                       + lastResid.toExponential(2) + " " + residualUnit;
+        }
+        statusText += ", ΔE=" + lastDe.toExponential(2) + " eV";
+        $("scf-status").textContent = statusText;
 
         // SCF energy convergence within the current step.
         Plotly.react("scf-energy-plot", [{
@@ -439,22 +466,29 @@
             font: { family: "system-ui, sans-serif", size: 10 },
         }, { displayModeBar: false, responsive: true });
 
-        // |g| spans many decades during SCF -> log y-axis.
-        Plotly.react("scf-gnorm-plot", [{
-            x: cycles,
-            y: gnorms,
-            mode: "lines+markers",
-            line: { color: "#fbbf24", width: 1.5 },
-            marker: { size: 5 },
-            name: "|g|",
-        }], {
-            title: { text: "SCF gradient norm |g|", font: { size: 12 } },
-            margin: { l: 70, r: 16, t: 32, b: 40 },
-            xaxis: { title: "SCF cycle", dtick: 1, zeroline: false },
-            yaxis: { title: "|g| (eV/Å)", type: "log", zeroline: false,
-                     tickformat: ".0e" },
-            font: { family: "system-ui, sans-serif", size: 10 },
-        }, { displayModeBar: false, responsive: true });
+        // Residual on log y-axis -- spans many decades during SCF.
+        const resPlotEl = $("scf-gnorm-plot");
+        if (residual !== null) {
+            resPlotEl.style.display = "";
+            Plotly.react("scf-gnorm-plot", [{
+                x: cycles,
+                y: residual,
+                mode: "lines+markers",
+                line: { color: residualColor, width: 1.5 },
+                marker: { size: 5 },
+                name: residualName,
+            }], {
+                title: { text: "SCF residual " + residualName,
+                         font: { size: 12 } },
+                margin: { l: 70, r: 16, t: 32, b: 40 },
+                xaxis: { title: "SCF cycle", dtick: 1, zeroline: false },
+                yaxis: { title: residualName + " (" + residualUnit + ")",
+                         type: "log", zeroline: false, tickformat: ".0e" },
+                font: { family: "system-ui, sans-serif", size: 10 },
+            }, { displayModeBar: false, responsive: true });
+        } else {
+            resPlotEl.style.display = "none";
+        }
     }
 
     /* ------------------------------------------------------------------ */

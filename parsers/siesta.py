@@ -21,9 +21,25 @@ Tolerant to in-progress files:
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Optional
 
 from .base import TrajectoryParser
+
+
+# Matches a SIESTA SCF iteration line, e.g.:
+#   scf:    1   -289239.010   -290967.214   -290967.445   0.001  -1.0   0.5
+# Columns: iscf, Eharris(eV), E_KS(eV), FreeEng(eV), dDmax, Ef(eV), dHmax(eV).
+# We pull cycle, E_KS, dDmax, dHmax; the other columns are SIESTA bookkeeping.
+_SCF_LINE_RE = re.compile(
+    r"^\s*scf:\s*(\d+)\s+"      # iscf
+    r"(-?[\d.eE+-]+)\s+"        # Eharris
+    r"(-?[\d.eE+-]+)\s+"        # E_KS  -- the energy we plot
+    r"(-?[\d.eE+-]+)\s+"        # FreeEng
+    r"([\d.eE+-]+)\s+"          # dDmax
+    r"(-?[\d.eE+-]+)\s+"        # Ef
+    r"([\d.eE+-]+)"             # dHmax
+)
 
 
 class SiestaParser(TrajectoryParser):
@@ -57,6 +73,15 @@ class SiestaParser(TrajectoryParser):
         forces_per_frame: List[List[List[float]]] = []
         lattice: Optional[List[List[float]]] = None
         pending_lattice: Optional[List[List[float]]] = None
+
+        # SCF iteration history.  One inner list per CG/MD step's SCF
+        # run; each entry a per-cycle dict matching the schema in
+        # docs/spec/parsers.md.  SIESTA's column set differs from
+        # PySCF (dHmax / dDmax instead of |g| / |ddm|); the UI picks
+        # the right residual to plot based on which keys are present.
+        scf_history: List[List[Dict[str, float]]] = []
+        current_scf: List[Dict[str, float]] = []
+        prev_E_KS: Optional[float] = None
 
         # Per-step buffers; flushed via _commit() when the next outcoor:
         # arrives or at EOF (only if the coords block is known to be
@@ -138,6 +163,32 @@ class SiestaParser(TrajectoryParser):
                         state = "scan"
 
                 # ---- scan mode ----
+                # SCF iteration line: collected into scf_history.  An
+                # iscf = 1 starts a new SCF run (= new CG/MD step's
+                # electronic problem).  Energy column is E_KS (already
+                # eV), so no unit conversion needed -- contrast with
+                # PySCF where Hartree -> eV happens at parse time.
+                m_scf = _SCF_LINE_RE.match(line)
+                if m_scf:
+                    iscf  = int(m_scf.group(1))
+                    e_ks  = float(m_scf.group(3))
+                    dDmax = float(m_scf.group(5))
+                    dHmax = float(m_scf.group(7))
+                    if iscf == 1 and current_scf:
+                        scf_history.append(current_scf)
+                        current_scf = []
+                        prev_E_KS = None
+                    delta_E = (e_ks - prev_E_KS) if prev_E_KS is not None else 0.0
+                    current_scf.append({
+                        "cycle":   iscf,
+                        "energy":  e_ks,        # eV
+                        "delta_E": delta_E,     # eV
+                        "dHmax":   dHmax,       # eV  (Hamiltonian residual)
+                        "dDmax":   dDmax,       # dimensionless
+                    })
+                    prev_E_KS = e_ks
+                    continue
+
                 if stripped.startswith("outcoor:"):
                     commit()
                     step_frame = []
@@ -182,6 +233,8 @@ class SiestaParser(TrajectoryParser):
         if state == "in_coords":
             step_frame = None
         commit()
+        if current_scf:
+            scf_history.append(current_scf)
 
         return {
             "frames":        frames,
@@ -190,10 +243,6 @@ class SiestaParser(TrajectoryParser):
             "energies":      energies,
             "max_forces":    max_forces,
             "forces":        forces_per_frame,
-            "scf_history":   [],   # SIESTA's scf table is parsed at the
-                                   # CG-step level (energies above);
-                                   # per-cycle SCF detail isn't surfaced
-                                   # yet -- placeholder so the front-end
-                                   # can rely on the key existing.
+            "scf_history":   scf_history,
             "source_format": cls.name,
         }

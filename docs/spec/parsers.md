@@ -1,7 +1,8 @@
 # Spec — parser plug-in interface
 
-**Modules**: `parsers/base.py`, `parsers/siesta.py`,
-`parsers/pyscf.py`, `parsers/__init__.py` &nbsp;·&nbsp; **Tests**:
+**Modules**: `parsers/base.py`, `parsers/molwatch_log.py`,
+`parsers/siesta.py`, `parsers/pyscf.py`, `parsers/__init__.py`
+&nbsp;·&nbsp; **Tests**: `tests/test_molwatch_log_parser.py`,
 `tests/test_siesta_parser.py`, `tests/test_pyscf_parser.py`,
 `tests/test_registry.py`
 
@@ -53,18 +54,18 @@ class TrajectoryParser(ABC):
 
 ### `scf_history` schema
 
-Optional per-engine richer progress data.  Each top-level entry is
-one **geom-opt step's SCF run**; each inner entry is one **SCF
+Per-engine richer progress data.  Each top-level entry is one
+**geom-opt / CG-MD step's SCF run**; each inner entry is one **SCF
 iteration** within that run:
 
 ```python
 [
-    [   # geom-opt step 0
+    [   # opt step 0
         {"cycle":   int,    # SCF iteration counter (resets per step)
          "energy":  float,  # eV
          "delta_E": float,  # eV  (E_cycle - E_prev_cycle)
-         "gnorm":   float,  # eV/Ang  (orbital-gradient norm)
-         "ddm":     float}, # dimensionless  (density-matrix change)
+         <residual key(s)>: float,
+         <density-change key>: float},
         ...
     ],
     [...],   # step 1
@@ -72,12 +73,34 @@ iteration** within that run:
 ]
 ```
 
+The keys `cycle`, `energy`, `delta_E` are **mandatory** for every
+parser.  The remaining keys are **engine-specific** and let the
+front-end pick which residual axis to plot:
+
+| Engine | Residual key | Unit  | Density-change key | Unit |
+|--------|--------------|-------|--------------------|------|
+| PySCF  | `gnorm`      | eV/Å  | `ddm`              | —    |
+| SIESTA | `dHmax`      | eV    | `dDmax`            | —    |
+
+The two engines expose different physical quantities:
+* PySCF reports `|g|` (orbital-gradient norm) and `|ddm|`
+  (density-matrix change norm).
+* SIESTA reports `dHmax` (largest Hamiltonian-matrix-element
+  change between successive cycles) and `dDmax` (largest
+  density-matrix-element change).
+
+Both are valid SCF residuals — just different ones.  The front-end
+detects which set of keys is present and labels the residual plot
+accordingly (`|g| (eV/Å)` vs `dHmax (eV)`).  No cross-engine
+conversion is performed; comparing residuals across engines is not
+meaningful.
+
 `scf_history` may be `[]` when the parser couldn't find a companion
-log file (or when the format doesn't expose per-cycle SCF detail
-yet — e.g. SIESTA today).  Front-end consumers MUST handle the
+log file (PySCF: `<job>.log` missing) or when the SCF section of
+the run output is empty.  Front-end consumers MUST handle the
 empty case gracefully (hide the SCF panel, don't crash).
 
-The most-recent entry (`scf_history[-1]`) is "the current geom-opt
+The most-recent entry (`scf_history[-1]`) is "the current opt
 step's SCF" — what molwatch shows in its live SCF-progress panel.
 
 * All per-step lists must be **index-aligned with `frames`** — the
@@ -102,6 +125,83 @@ bug:
   eV/Å with `1 Ha/Bohr = 51.42208619 eV/Å`).  Using `max(|F_component|)`
   instead is a spec violation.
 
+## molwatch unified-log parser specifics
+
+`parsers/molwatch_log.py`:
+
+* `name="molwatch"`, `label="molwatch unified log (.molwatch.log)"`,
+  `hint="the unified per-step log emitted by molbuilder-generated
+  PySCF scripts (e.g. <job>.molwatch.log)"`.
+* `can_parse`: matches if any of the first 5 lines starts with the
+  literal marker `# molwatch trajectory log`.  This is unambiguous
+  by design -- no engine-native format emits that line.
+* Registered **first** in `PARSERS`: any run generated through
+  molbuilder produces a `.molwatch.log` and that's what the user
+  should point at; SIESTA / raw-PySCF parsers stay as fallbacks for
+  runs that didn't go through molbuilder.
+
+### Format -- marker-driven, single-file
+
+The file is a sequence of self-describing blocks.  Each block is the
+complete, index-aligned data for one geom-opt / CG-MD step:
+
+```text
+# molwatch trajectory log v1
+# generator: molbuilder/pyscf_input
+# engine: <name>                # -> result["source_format"]
+# job: <job_name>
+# units: energy=eV, force=eV/Ang, coords=Ang
+# created: <ISO8601>
+
+==== molwatch step <N> begin ====
+step_index: <N>
+n_atoms:    <K>
+coordinates (Ang):
+   <element>   <x>   <y>   <z>
+   ...
+energy (eV): <E>
+forces (eV/Ang):
+   <element>  <fx>  <fy>  <fz>
+   ...
+max_force (eV/Ang): <Fmax>
+scf_history begin
+#  cycle    energy(eV)    delta_E(eV)    gnorm(eV/Ang)    ddm
+       <c>     <e>           <de>           <g>            <d>
+   ...
+scf_history end
+==== molwatch step <N> end ====
+```
+
+The `==== molwatch step <N> begin ==== / end ====` markers are the
+parser's primary anchors -- everything else is matched by string
+prefix on lines like `energy (eV):`, `forces (eV/Ang):`,
+`scf_history begin` etc.  Column widths in `scf_history` rows are
+cosmetic; whitespace-split + position is what the parser uses.
+
+### Robustness invariants
+
+* **Torn final block** (a `begin` without a matching `end`) is
+  dropped silently.  This is the live-tailing case: molwatch reads
+  the file while the run is still writing the next step.
+* **None residuals**: gnorm or ddm may legitimately be missing for
+  a given cycle (e.g. cycle 0 of some SCFs).  The emitter writes the
+  literal token `None`; the parser converts to JSON `null`.
+* **Engine fallback**: if the `# engine: <name>` header is absent,
+  `source_format` defaults to `"molwatch"` so the result still has
+  a non-null string.
+
+### `scf_history` keys
+
+The molwatch unified log uses the **PySCF residual key set**
+(`gnorm` / `ddm`) regardless of who emitted the log -- it's an
+internal-format choice, not engine-dependent.  Mandatory: `cycle`,
+`energy`, `delta_E`.  Optional / nullable: `gnorm`, `ddm`.  The
+front-end residual selector keys on `gnorm` presence (treats it
+like a PySCF run for axis labeling).  Future engines that emit a
+`.molwatch.log` should populate the same keys; they can leave
+`gnorm` / `ddm` as `None` if they don't have analogues, and the UI
+will simply not render the residual axis for those runs.
+
 ## SIESTA parser specifics
 
 `parsers/siesta.py`:
@@ -122,6 +222,13 @@ bug:
   stray `Max <num>` in a header (M7 fix) can't be misattributed.
 * Torn-frame rule: if state is `in_coords` at EOF, the partial
   frame is dropped.
+* `scf_history`: collected from the inline `scf:` iteration table
+  that appears between every CG/MD step.  Columns parsed:
+  `iscf` (cycle), `E_KS` (eV → `energy`), `dDmax`
+  (dimensionless), `dHmax` (eV).  A new SCF run starts every time
+  `iscf == 1`; the previous run is flushed into `scf_history`.
+  `delta_E` is computed within a run as `E_KS - E_KS_prev`, with
+  `0.0` for the first cycle of each run.
 
 ## PySCF / geomeTRIC parser specifics
 

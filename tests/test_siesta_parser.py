@@ -159,6 +159,66 @@ def test_source_format_tag(siesta_path):
     assert result["source_format"] == "siesta"
 
 
+def test_scf_history_default_empty(tmp_path):
+    """A SIESTA log with no scf: lines (header noise only) should
+    yield scf_history=[]."""
+    p = tmp_path / "noisy.out"
+    p.write_text("Welcome to SIESTA\nredata: blah\n")
+    result = SiestaParser.parse(str(p))
+    assert result["scf_history"] == []
+
+
+def test_scf_history_collects_per_cycle(siesta_path):
+    """The SAMPLE has one scf: line per CG step, so each step's
+    history list has length 1."""
+    result = SiestaParser.parse(siesta_path)
+    runs = result["scf_history"]
+    # Two CG steps in SAMPLE; each has exactly one scf: line.
+    assert len(runs) == 2
+    assert all(len(r) == 1 for r in runs)
+
+
+def test_scf_history_per_cycle_keys(siesta_path):
+    """Each per-cycle entry must have the SIESTA key set."""
+    runs = SiestaParser.parse(siesta_path)["scf_history"]
+    expected = {"cycle", "energy", "delta_E", "dHmax", "dDmax"}
+    for run in runs:
+        for entry in run:
+            assert set(entry.keys()) == expected
+
+
+def test_scf_history_real_multi_cycle_run(tmp_path):
+    """A SIESTA-style run with multiple SCF iterations within one CG
+    step splits correctly: iscf=1 marks each new run boundary."""
+    sample = (
+        "Welcome to SIESTA\n"
+        "redata: prelude\n"
+        # First CG step: 3 SCF iterations
+        "   scf:    1   -100.0   -100.5   -100.5   0.10  -1.0   0.5\n"
+        "   scf:    2   -100.4   -100.7   -100.7   0.05  -1.0   0.1\n"
+        "   scf:    3   -100.45  -100.71  -100.71  0.01  -1.0   0.01\n"
+        "SCF Convergence by DM+H criterion\n"
+        # Second CG step: iscf restarts at 1
+        "   scf:    1   -101.0   -101.2   -101.2   0.08  -1.0   0.4\n"
+        "   scf:    2   -101.1   -101.3   -101.3   0.02  -1.0   0.05\n"
+        "SCF Convergence by DM+H criterion\n"
+    )
+    p = tmp_path / "multi.out"
+    p.write_text(sample)
+    runs = SiestaParser.parse(str(p))["scf_history"]
+    assert len(runs) == 2
+    assert len(runs[0]) == 3
+    assert len(runs[1]) == 2
+    # Energy column is E_KS (eV); cycle 1 of run 1 has E_KS = -100.5
+    import math as _math
+    assert _math.isclose(runs[0][0]["energy"], -100.5)
+    # delta_E for first cycle is 0; subsequent are differences.
+    assert runs[0][0]["delta_E"] == 0.0
+    assert _math.isclose(runs[0][1]["delta_E"], -100.7 - (-100.5))
+    # dHmax column comes through:
+    assert _math.isclose(runs[0][2]["dHmax"], 0.01)
+
+
 def test_stray_max_line_outside_force_block_ignored(tmp_path):
     """Regression: a 'Max <num>' line that appears OUTSIDE a force
     block (e.g. in a header) must not be mis-attributed to the next
