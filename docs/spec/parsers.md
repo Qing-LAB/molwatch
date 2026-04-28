@@ -1,0 +1,166 @@
+# Spec — parser plug-in interface
+
+**Modules**: `parsers/base.py`, `parsers/siesta.py`,
+`parsers/pyscf.py`, `parsers/__init__.py` &nbsp;·&nbsp; **Tests**:
+`tests/test_siesta_parser.py`, `tests/test_pyscf_parser.py`,
+`tests/test_registry.py`
+
+## TrajectoryParser interface
+
+```python
+class TrajectoryParser(ABC):
+    name:  str = "abstract"   # short id ("siesta", "pyscf")
+    label: str = "abstract"   # UI-friendly ("SIESTA .out / .log")
+    hint:  str = ""           # what file to point us at
+
+    @classmethod @abstractmethod
+    def can_parse(cls, path: str) -> bool: ...
+
+    @classmethod @abstractmethod
+    def parse(cls, path: str) -> Dict[str, Any]: ...
+```
+
+### `can_parse`
+
+* Cheap content-sniff.  Read at most ~80 lines.  Look for format
+  markers (e.g. `"Welcome to SIESTA"`, or `"Iteration K Energy E"`
+  on line 2 of an XYZ).
+* Return False fast on a mismatch.
+* **Must not raise** on unsupported / unreadable files.  An
+  exception is treated by the registry as a buggy parser; the
+  registry will skip it and try the next one.
+
+### `parse`
+
+* Re-callable: the Flask app calls it on every mtime change.
+* Tolerant of in-progress files: torn frames at EOF are dropped, a
+  partial step that has coordinates but no energy yet stores
+  energy as `None`.
+* Returns a dict with a fixed schema:
+
+```python
+{
+    "frames":      List[List[List[Any]]],        # per step: [[el, x, y, z], ...]
+    "energies":    List[Optional[float]],        # eV per step
+    "max_forces":  List[Optional[float]],        # eV/Ang per step
+    "forces":      List[List[List[float]]],      # eV/Ang per atom per step (or [])
+    "iterations":  List[int],                    # length matches frames
+    "lattice":     Optional[List[List[float]]],  # 3x3 Ang or None
+    "source_format": str,                        # the parser's `name`
+}
+```
+
+* All per-step lists must be **index-aligned with `frames`** — the
+  JS viewer walks them in lockstep via the slider.
+* `None` round-trips to JSON `null`; Plotly draws those as gaps.
+* JSON-strict-safe: no `NaN`, no `Inf`.  Tested via
+  `json.dumps(result, allow_nan=False)`.
+
+## Unit conventions (cross-format consistency)
+
+This is the spec contract that prevents the SIESTA/PySCF axis-mismatch
+bug:
+
+* **Energy** is reported in **eV** by every parser, regardless of the
+  source file's native units.  PySCF / geomeTRIC writes Hartree in its
+  XYZ comment; the PySCFParser must convert via the standard CODATA
+  factor (`1 Hartree = 27.211386245988 eV`).
+* **Force** is reported in **eV/Å** as the **maximum per-atom
+  magnitude**, i.e. `max_i sqrt(fx_i² + fy_i² + fz_i²)`.  This matches
+  SIESTA's `Max <num>` line.  The PySCFParser must compute this from
+  the 3N gradient components in the qdata file (Hartree/Bohr →
+  eV/Å with `1 Ha/Bohr = 51.42208619 eV/Å`).  Using `max(|F_component|)`
+  instead is a spec violation.
+
+## SIESTA parser specifics
+
+`parsers/siesta.py`:
+
+* `name="siesta"`, `label="SIESTA .out / .log"`, `hint="the main
+  SIESTA run output (run.out, siesta.log, etc.)"`.
+* `can_parse`: matches if the file's first 80 lines contain any of
+  `"Welcome to SIESTA"`, `"siesta: System type"`, the banner line, or
+  `"redata: "`.
+* Per step extracts:
+  * coordinates from `outcoor: Atomic coordinates (Ang):` blocks
+  * total energy from `siesta: E_KS(eV) = ...`
+  * per-atom forces from `siesta: Atomic forces (eV/Ang):` blocks
+  * max force from the post-block `Max <value>` line (the
+    `constrained` duplicate has 3 tokens, filtered out)
+* Lattice: most-recent `outcell: Unit cell vectors (Ang):` block.
+* The "Max" line is gated on `step_forces` being non-empty so a
+  stray `Max <num>` in a header (M7 fix) can't be misattributed.
+* Torn-frame rule: if state is `in_coords` at EOF, the partial
+  frame is dropped.
+
+## PySCF / geomeTRIC parser specifics
+
+`parsers/pyscf.py`:
+
+* `name="pyscf"`, `label="PySCF / geomeTRIC trajectory"`,
+  `hint="geomeTRIC's streaming trajectory <job>_geom_optim.xyz (NOT
+  the PySCF .log)"`.
+* `can_parse`: line 0 is digits (atom count) AND line 1 matches
+  `Iteration <int> Energy <float>` (case-insensitive, regex).
+  This is the format geomeTRIC writes when called with `prefix=` —
+  what molbuilder's PySCF script generator uses.
+* Multi-frame XYZ; one frame per `Iteration K Energy E` block.
+* Energy converted Hartree → eV per spec.
+* `lattice` is always None (geomeTRIC trajectories carry no cell).
+* `forces` is always `[[] for _ in frames]` (geomeTRIC's _optim.xyz
+  doesn't include per-atom forces).
+* Optional companion `<prefix>.qdata.txt` parser: if present
+  alongside the `_optim.xyz`, populates `max_forces` per step.
+  Format: `ENERGY ...` opens a new frame (flush previous frame's
+  max-force on close); `GRADIENT g1 g2 ... g_3N` provides the
+  components for the current frame's max-force computation.
+
+## Registry contract (`parsers/__init__.py`)
+
+```python
+PARSERS: List[Type[TrajectoryParser]] = [
+    SiestaParser,
+    PySCFParser,
+]
+
+def detect_parser(path) -> Type[TrajectoryParser]:
+    """First parser whose can_parse(path) is True wins."""
+
+def parser_summary() -> List[dict]:
+    """[{name, label, hint}, ...] — feeds /api/formats."""
+```
+
+* Order matters: more-specific format markers go first so a permissive
+  parser can't shadow them.
+* `detect_parser` raises `UnknownFormatError` (subclass of
+  `ValueError`) when nothing matches.  The error message lists every
+  registered parser's label + hint AND, for `.log` filenames that
+  look like a PySCF run, suggests the corresponding `_geom_optim.xyz`.
+* A parser's `can_parse` raising is caught and treated as False
+  (registry resilience).
+
+## Adding a new format
+
+Two steps:
+
+1. Drop a new `parsers/<name>.py` defining `<Name>Parser` that
+   subclasses `TrajectoryParser` and implements `can_parse` + `parse`
+   per this spec.
+2. Add the class to `PARSERS` in `parsers/__init__.py`.
+
+The Flask app + front-end pick it up automatically with no other
+changes.
+
+## Forbidden patterns
+
+A parser must NOT:
+
+1. Return energies or forces in non-spec units (Hartree / Ha-Bohr /
+   etc.).  The eV / eV/Å convention is fixed.
+2. Return per-step arrays of mismatched length — `len(frames) ==
+   len(energies) == len(max_forces) == len(forces) ==
+   len(iterations)` is invariant.
+3. Raise from `can_parse`.  Bad input → return False.
+4. Open the file in binary mode without an encoding fallback.  Use
+   `open(path, "r", errors="replace")` so a stray non-UTF8 byte
+   doesn't crash mid-stream.
