@@ -1,4 +1,4 @@
-"""moldyn_view parser registry.
+"""molwatch parser registry.
 
 Adding support for a new output format is two steps:
   1. drop a new ``foo.py`` module here that defines a ``FooParser``

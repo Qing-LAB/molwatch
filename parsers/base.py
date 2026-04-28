@@ -2,7 +2,7 @@
 
 Every output format (SIESTA .out, PySCF / geomeTRIC .xyz, future
 NWChem / ORCA / Gaussian / OpenMM / ...) implements ``TrajectoryParser``.
-The Flask app in ``moldyn_view.app`` discovers parsers via the registry
+The Flask app in ``molwatch.app`` discovers parsers via the registry
 in ``parsers/__init__.py`` and never knows about specific file formats.
 
 Return shape from ``parse()``: a JSON-friendly dict that the front-end

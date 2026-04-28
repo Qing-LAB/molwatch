@@ -3,7 +3,7 @@ requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "moldyn_view"
+name = "molwatch"
 version = "0.1.0"
 description = "Live trajectory viewer for SIESTA / PySCF / future codes."
 readme = "README.md"
@@ -26,6 +26,9 @@ test = [
     "pytest>=7",
     "pyflakes>=3",
 ]
+
+[project.scripts]
+molwatch = "app:main"
 
 [tool.setuptools]
 py-modules = ["app"]

@@ -1,4 +1,4 @@
-"""moldyn_view -- live trajectory viewer for SIESTA / PySCF / future.
+"""molwatch -- live trajectory viewer for SIESTA / PySCF / future.
 
 A small Flask server that watches an output file (SIESTA .out,
 geomeTRIC's <prefix>_optim.xyz, etc.) while the calculation is still
@@ -145,7 +145,7 @@ def api_data():
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="moldyn_view -- live SIESTA / PySCF trajectory viewer."
+        description="molwatch -- live SIESTA / PySCF trajectory viewer."
     )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=5000)

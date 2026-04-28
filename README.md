@@ -1,4 +1,4 @@
-# moldyn_view
+# molwatch
 
 A small Flask + 3Dmol.js webapp that watches a quantum-chemistry
 output file *while the calculation is still running* and shows:
@@ -30,7 +30,7 @@ selected automatically.
 ## Layout
 
 ```
-moldyn_view/
+molwatch/
   app.py                       # Flask app (entry point)
   parsers/                     # plug-in parser modules
     __init__.py                # registry + auto-detect
@@ -62,7 +62,7 @@ click **Load**.
 
 ## Running with `molbuilder`
 
-`moldyn_view` is the live-streaming companion to
+`molwatch` is the live-streaming companion to
 [`molbuilder`](https://github.com/Qing-LAB/molbuilder)'s SIESTA / PySCF
 script generators.  Typical pipeline:
 
@@ -74,12 +74,12 @@ molbuilder pyscf dna.xyz dna_relax.py
 # 2. Run the script (in another terminal)
 python dna_relax.py
 
-# 3. Watch it live in moldyn_view
-python -m moldyn_view.app          # paste /path/to/dna_relax_geom_optim.xyz
+# 3. Watch it live in molwatch
+python -m molwatch.app          # paste /path/to/dna_relax_geom_optim.xyz
 ```
 
 For SIESTA: `molbuilder fdf in.xyz dna.fdf` then `siesta < dna.fdf`,
-then point moldyn_view at the resulting `siesta.out`.
+then point molwatch at the resulting `siesta.out`.
 
 ## Tests
 

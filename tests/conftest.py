@@ -1,4 +1,4 @@
-"""Pytest fixtures shared across the moldyn_view test suite."""
+"""Pytest fixtures shared across the molwatch test suite."""
 
 from __future__ import annotations
 
