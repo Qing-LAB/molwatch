@@ -220,7 +220,7 @@ class PySCFParser(TrajectoryParser):
         # tell "force data missing because qdata isn't there" apart
         # from "force data missing because the run hasn't computed
         # forces yet."
-        max_forces, qdata_missing = cls._read_qdata_forces(path, len(frames))
+        max_forces, qdata_missing = cls._read_qdata_forces(path)
         scf_history, log_missing  = cls._read_scf_history(path)
 
         missing_companions: List[str] = []
@@ -255,20 +255,22 @@ class PySCFParser(TrajectoryParser):
     # ------------------------------------------------------------- #
     @classmethod
     def _read_qdata_forces(
-        cls, traj_path: str, n_frames: int
+        cls, traj_path: str
     ) -> Tuple[List[Optional[float]], Optional[str]]:
         """Try `<prefix>.qdata{,.txt}` next to the trajectory.
 
         Returns ``(forces_per_step, missing_path)``:
 
-        * ``forces_per_step`` is a list of max-force values (eV/Ang)
-          of length ``n_frames``; each entry is ``None`` if the file
-          isn't there or the entry is missing for that step.
-        * ``missing_path`` is the canonical expected path (``.qdata.txt``
-          variant) when no qdata file was found, or ``None`` when one
-          was found and read.  The caller surfaces this as part of
-          ``missing_companions`` so the UI can explain why max-force
-          data is unavailable.
+        * ``forces_per_step`` is whatever the helper extracted from
+          the qdata file -- possibly empty, possibly shorter than
+          the trajectory.  ``assemble_trajectory`` is the single
+          place that pads/truncates per-step lists to align with
+          frames, so we deliberately don't do it here.
+        * ``missing_path`` is the canonical expected path (the
+          ``.qdata.txt`` variant) when no qdata file was found, or
+          ``None`` when one was found and read.  The caller
+          surfaces this via ``missing_companions`` so the UI can
+          explain why max-force data is unavailable.
         """
         base, fname = os.path.split(traj_path)
         # geomeTRIC's pair: <prefix>_optim.xyz <-> <prefix>.qdata.txt
@@ -282,7 +284,7 @@ class PySCFParser(TrajectoryParser):
         ]
         qpath = next((p for p in candidates if os.path.isfile(p)), None)
         if qpath is None:
-            return [None] * n_frames, candidates[0]
+            return [], candidates[0]
 
         # Per-step: ENERGY starts a frame, GRADIENT (for THAT frame)
         # follows.  We flush the current frame's max only on the NEXT
@@ -320,12 +322,12 @@ class PySCFParser(TrajectoryParser):
                 if in_frame:
                     max_forces.append(step_max)
         except OSError:
-            return [None] * n_frames, candidates[0]
+            return [], candidates[0]
 
-        # Pad / truncate to align with frames.
-        if len(max_forces) < n_frames:
-            max_forces.extend([None] * (n_frames - len(max_forces)))
-        return max_forces[:n_frames], None
+        # Padding / truncation lives in assemble_trajectory, NOT here.
+        # We just return what we extracted; the assembler aligns it
+        # with frames.
+        return max_forces, None
 
     # ------------------------------------------------------------- #
     #  PySCF-log SCF-iteration helper                                #

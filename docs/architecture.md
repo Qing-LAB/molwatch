@@ -146,12 +146,23 @@ molwatch/
 ### 4.1  Contract: `parsers.base`
 
 `parsers.base` is the **canonical reference** for what every parser
-must produce.  Three things live here:
+must produce.  The contract is **enforced via tests, not runtime
+type-checking**: `ParsedTrajectory` is a `TypedDict` (documentation
++ static-checker hints), and the conformance suite at
+`tests/test_schema_conformance.py` runs the invariant assertions
+against every registered parser at every test run.  We do not
+validate at parse time because doing so would either slow normal
+parsing or raise on partial-input cases the parser is supposed to
+tolerate.
+
+Three things live in `parsers.base`:
 
 1. **`TrajectoryParser`** — abstract base class with `name`,
-   `label`, `hint`, `can_parse`, `parse`.  Subclasses implement
-   `can_parse` (cheap content-based detection) and `parse` (full
-   extraction returning a `ParsedTrajectory`).
+   `label`, `hint`, `can_parse`, `parse`, `common_mistakes`.
+   Subclasses implement `can_parse` (cheap content-based detection)
+   and `parse` (full extraction returning a `ParsedTrajectory`),
+   and may override `common_mistakes` to declare format-specific
+   foot-gun hints.
 
 2. **`ParsedTrajectory`** — TypedDict declaring the result schema.
    Required fields: `frames`, `energies`, `max_forces`, `forces`,
@@ -160,6 +171,18 @@ must produce.  Three things live here:
    `created_at`, `missing_companions`.  See the docstring in
    `parsers/base.py` for field-level units, semantics, and what
    `None` means in each context.
+
+   Canonical `source_format` values (the front-end branches on
+   these):
+
+   | value      | source                                                     |
+   |------------|------------------------------------------------------------|
+   | `siesta`   | SiestaParser; or molwatch_log file with `# engine: siesta` |
+   | `pyscf`    | PySCFParser; or molwatch_log file with `# engine: pyscf`   |
+   | `molwatch` | MolwatchLogParser fallback when no `# engine:` header      |
+
+   New parsers MUST pick a stable, documented value and add it to
+   this table.
 
 3. **`REQUIRED_KEYS` / `OPTIONAL_KEYS`** — frozensets used by the
    conformance suite to assert key presence.
