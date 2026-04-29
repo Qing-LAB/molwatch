@@ -258,3 +258,50 @@ def test_parse_value_types(parser_and_input):
     parser_cls, path = parser_and_input
     result = parser_cls.parse(path)
     _assert_value_types(result, parser_cls.name)
+
+
+def test_parse_emits_missing_companions_key(parser_and_input):
+    """Every parser MUST emit `missing_companions` (the OPTIONAL set
+    is "must be present, may be empty/None", not "may be absent").
+    Architecture §2.3: 'never silently degrade.'  Front-end iterates
+    this list without a None check; absence here is a contract bug."""
+    parser_cls, path = parser_and_input
+    result = parser_cls.parse(path)
+    assert "missing_companions" in result, (
+        f"{parser_cls.name!r}: missing_companions key absent"
+    )
+
+
+def test_parse_emits_created_at_key(parser_and_input):
+    """Every parser MUST emit `created_at` (set to None when no
+    timestamp can be extracted).  Frontend uses presence of this key
+    to decide whether to show 'started ... running for ...' in the
+    status banner."""
+    parser_cls, path = parser_and_input
+    result = parser_cls.parse(path)
+    assert "created_at" in result, (
+        f"{parser_cls.name!r}: created_at key absent"
+    )
+
+
+def test_parse_flask_jsonify_round_trip(parser_and_input):
+    """End-to-end JSON serialisation must succeed via Flask's jsonify
+    (which is what /api/load and /api/data actually use).  Catches
+    the case where a parser's result is `json.dumps`-safe but Flask's
+    encoder rejects it for some other reason (custom types, etc.)."""
+    from flask import Flask, jsonify
+    parser_cls, path = parser_and_input
+    result = parser_cls.parse(path)
+    app = Flask(__name__)
+    app.config["JSON_SORT_KEYS"] = False
+    with app.app_context():
+        response = jsonify(result)
+    payload = response.get_data(as_text=True)
+    # Round-trip back; the data we ship to the client must match
+    # what the parser produced (modulo dict-vs-TypedDict subtleties).
+    decoded = json.loads(payload)
+    assert decoded["source_format"] == result["source_format"]
+    assert len(decoded["frames"]) == len(result["frames"])
+    # Critically: nothing serialised to a string "NaN" or similar.
+    assert "NaN" not in payload
+    assert "Infinity" not in payload

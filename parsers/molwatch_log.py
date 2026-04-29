@@ -51,6 +51,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 from .base import TrajectoryParser, ParsedTrajectory
+from ._result import assemble_trajectory
 
 
 _BEGIN_RE = re.compile(r"====\s*molwatch\s+step\s+(\d+)\s+begin\s*====")
@@ -257,17 +258,22 @@ class MolwatchLogParser(TrajectoryParser):
 
         # Torn final block at EOF: drop it (in_block True, no `end` seen).
 
-        return {
-            "frames":        frames,
-            "lattice":       None,
-            "iterations":    iterations,
-            "energies":      energies,
-            "max_forces":    max_forces,
-            "forces":        forces_per_frame,
-            "scf_history":   scf_history,
-            "created_at":    created_at,
-            "source_format": engine,
-            # The unified .molwatch.log is by construction the single
-            # source of truth -- no siblings to look for.
-            "missing_companions": [],
-        }
+        # Hand the collected lists to the schema-conformant assembler.
+        # The unified .molwatch.log is by construction the single
+        # source of truth -- no sibling files are expected, so
+        # missing_companions is empty.  source_format reflects the
+        # engine declared in the file's header (or "molwatch" when
+        # the header didn't specify one), so the UI can adapt labels
+        # to whichever engine produced the file.
+        return assemble_trajectory(
+            source_format=engine,
+            frames=frames,
+            energies=energies,
+            max_forces=max_forces,
+            forces=forces_per_frame,
+            scf_history=scf_history,
+            iterations=iterations,
+            lattice=None,
+            created_at=created_at,
+            missing_companions=[],
+        )

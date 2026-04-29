@@ -25,6 +25,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 from .base import TrajectoryParser, ParsedTrajectory
+from ._result import assemble_trajectory
 
 
 # `>> Start of run:  28-APR-2026  20:01:39`  (SIESTA v5.x; v4.x uses
@@ -315,26 +316,20 @@ class SiestaParser(TrajectoryParser):
         if current_scf:
             scf_history.append(current_scf)
 
-        # Schema invariant: every per-step list has length len(frames).
-        # The SCF run table on a partially-written or SCF-empty run
-        # may have fewer entries than there are committed frames; pad
-        # the tail with empty inner lists so the index-alignment
-        # contract holds (see docs/spec/parsers.md).
-        while len(scf_history) < len(frames):
-            scf_history.append([])
-        scf_history = scf_history[: len(frames)]
-
-        return {
-            "frames":        frames,
-            "lattice":       lattice,
-            "iterations":    list(range(len(frames))),
-            "energies":      energies,
-            "max_forces":    max_forces,
-            "forces":        forces_per_frame,
-            "scf_history":   scf_history,
-            "source_format": cls.name,
-            "created_at":    created_at,
-            # SIESTA's main `.out` is the single source of truth for
-            # the run -- no sibling files to discover.
-            "missing_companions": [],
-        }
+        # Hand the collected lists to the schema-conformant assembler
+        # (parsers/_result.py).  The helper enforces the schema
+        # invariants: per-step alignment with frames, NaN/Inf -> None
+        # sanitisation, the canonical field order.  SIESTA's main
+        # `.out` is the single source of truth for the run, so no
+        # sibling files are expected -- missing_companions is empty.
+        return assemble_trajectory(
+            source_format=cls.name,
+            frames=frames,
+            energies=energies,
+            max_forces=max_forces,
+            forces=forces_per_frame,
+            scf_history=scf_history,
+            lattice=lattice,
+            created_at=created_at,
+            missing_companions=[],
+        )

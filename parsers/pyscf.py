@@ -27,6 +27,7 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from .base import TrajectoryParser, ParsedTrajectory
+from ._result import assemble_trajectory
 
 
 # Hartree -> eV
@@ -191,36 +192,32 @@ class PySCFParser(TrajectoryParser):
         max_forces, qdata_missing = cls._read_qdata_forces(path, len(frames))
         scf_history, log_missing  = cls._read_scf_history(path)
 
-        # Schema invariant: scf_history is index-aligned with frames.
-        # The PySCF .log records SCF runs in lockstep with opt steps,
-        # so on a complete run len(scf_history) == len(frames); but on
-        # a partial / log-less run we pad / truncate to keep the
-        # alignment contract.  See docs/spec/parsers.md.
-        while len(scf_history) < len(frames):
-            scf_history.append([])
-        scf_history = scf_history[: len(frames)]
-
         missing_companions: List[str] = []
         if qdata_missing is not None:
             missing_companions.append(qdata_missing)
         if log_missing is not None:
             missing_companions.append(log_missing)
 
-        return {
-            "frames":        frames,
-            "lattice":       None,            # geomeTRIC traj has no cell
-            "iterations":    iterations or list(range(len(frames))),
-            "energies":      energies,
-            "max_forces":    max_forces,
-            "forces":        [[] for _ in frames],
-            "scf_history":   scf_history,
-            "source_format": cls.name,
-            # geomeTRIC's `_optim.xyz` carries no start timestamp.
-            # PySCF's `.log` does, but parsing it for time alone isn't
-            # worth the cost; the UI falls back to file mtime.
-            "created_at":    None,
-            "missing_companions": missing_companions,
-        }
+        # Hand to the schema-conformant assembler.  geomeTRIC's
+        # `_optim.xyz` carries no per-atom forces (we pass forces=None
+        # which the helper expands to a list of empty inner lists)
+        # and no start timestamp.  Sibling-file discovery is the
+        # PySCF parser's special concern; the canonical missing
+        # paths get surfaced via missing_companions so the UI can
+        # explain to the user *why* force or SCF data is unavailable
+        # rather than silently degrading.
+        return assemble_trajectory(
+            source_format=cls.name,
+            frames=frames,
+            energies=energies,
+            max_forces=max_forces,
+            forces=None,                 # geomeTRIC trajectory has no per-atom F
+            scf_history=scf_history,
+            iterations=iterations or None,
+            lattice=None,                # molecules only; no cell
+            created_at=None,
+            missing_companions=missing_companions,
+        )
 
     # ------------------------------------------------------------- #
     #  qdata-companion helper                                        #
