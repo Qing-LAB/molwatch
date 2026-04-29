@@ -314,7 +314,7 @@ def run_server(host: str = "127.0.0.1",
     import sys as _sys
     if host not in LOCAL_HOSTS:
         print(
-            f"WARNING: --host={host} exposes /api/load to the network.\n"
+            f"warning: --host={host} exposes /api/load to the network.\n"
             "         The endpoint reads ANY local file the server can\n"
             "         access.  Only do this on a trusted single-user\n"
             "         machine, or add a reverse-proxy with auth in front.",
@@ -322,7 +322,7 @@ def run_server(host: str = "127.0.0.1",
         )
     if debug:
         print(
-            "WARNING: Flask debug mode is on -- the debugger executes\n"
+            "warning: Flask debug mode is on -- the debugger executes\n"
             "         arbitrary code; never expose this on a non-\n"
             "         loopback address.",
             file=_sys.stderr,
