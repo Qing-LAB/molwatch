@@ -61,25 +61,67 @@ _SCF_CONVERGED_RE = re.compile(
 
 class PySCFParser(TrajectoryParser):
     name  = "pyscf"
-    label = "PySCF / geomeTRIC trajectory"
-    hint  = ("geomeTRIC's streaming trajectory <job>_geom_optim.xyz "
-             "(NOT the PySCF .log)")
+    label = "XYZ trajectory (PySCF / geomeTRIC / generic multi-frame XYZ)"
+    hint  = ("a multi-frame XYZ trajectory -- e.g., geomeTRIC's "
+             "<job>_geom_optim.xyz (NOT the PySCF .log).  Generic XYZ "
+             "with any comment-line format is also accepted; energies "
+             "are extracted only when the comment matches the geomeTRIC "
+             "`Iteration K Energy E` pattern.")
+
+    # Maximum atom count we'll accept in line 0 before declaring the
+    # file isn't an XYZ.  Far above any realistic chemistry use case
+    # but bounded to reject obvious garbage (e.g., a CSV row count of
+    # millions parsed as atom count).
+    _MAX_PLAUSIBLE_ATOMS = 1_000_000
 
     @classmethod
     def can_parse(cls, path: str) -> bool:
-        """A geomeTRIC `_optim.xyz` looks like multi-frame XYZ whose
-        comment lines match `Iteration K Energy E`.  Peek at line 2."""
+        """Structural XYZ check, not banner-matching.
+
+        An XYZ file -- regardless of which tool produced it -- has the
+        invariant:
+
+            line 0:  positive integer N      (atom count)
+            line 1:  arbitrary comment       (free text)
+            lines 2..N+1:  atom lines        (element symbol + 3 floats)
+
+        We verify exactly that, with no requirement on the comment line's
+        content.  geomeTRIC's `Iteration K Energy E` is one possible
+        comment format; ASE writes a different one; user scripts may
+        write any string.  ``parse()`` extracts an energy when the
+        comment matches the geomeTRIC pattern and falls back to
+        ``energy=None`` otherwise -- so accepting any well-formed XYZ
+        here is safe.
+
+        We sample at most the first 3 atom lines (or all of them if N<3)
+        for the structural check -- enough to reject CSVs / namelists /
+        other text files that happen to start with an integer, while
+        keeping the detector cheap.
+        """
         try:
             with open(path, "r", errors="replace") as fh:
-                lines = [next(fh, "") for _ in range(4)]
+                line0 = fh.readline().strip()
+                if not line0.isdigit():
+                    return False
+                n_atoms = int(line0)
+                if n_atoms <= 0 or n_atoms > cls._MAX_PLAUSIBLE_ATOMS:
+                    return False
+                fh.readline()  # comment line; any content accepted
+                # Verify the atom lines parse: element token + 3 floats.
+                # Sample at most 3 (or fewer if n_atoms < 3).
+                for _ in range(min(n_atoms, 3)):
+                    parts = fh.readline().split()
+                    if len(parts) < 4:
+                        return False
+                    try:
+                        float(parts[1])
+                        float(parts[2])
+                        float(parts[3])
+                    except ValueError:
+                        return False
+                return True
         except OSError:
             return False
-        # Line 0: atom count.  Line 1: comment.
-        if not lines[0].strip().isdigit():
-            return False
-        if not _COMMENT_RE.search(lines[1]):
-            return False
-        return True
 
     @classmethod
     def parse(cls, path: str) -> Dict[str, Any]:

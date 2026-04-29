@@ -50,13 +50,64 @@ def test_can_parse_rejects_non_xyz(tmp_path):
     assert PySCFParser.can_parse(str(p)) is False
 
 
-def test_can_parse_rejects_plain_xyz_without_iteration_marker(tmp_path):
-    """A plain XYZ (no 'Iteration K Energy E' comment) should not be
-    claimed by the PySCF parser; the SIESTA parser shouldn't claim it
-    either, so the registry will fall through to UnknownFormatError."""
+def test_can_parse_accepts_plain_xyz_without_iteration_marker(tmp_path):
+    """A plain XYZ with any comment text -- not just geomeTRIC's
+    `Iteration K Energy E` -- must be accepted.  The detector is
+    structural, not banner-based: it should not be tied to one
+    specific tool's comment-line format.  ``parse()`` already
+    handles the no-energy case (energy=None)."""
     p = tmp_path / "regular.xyz"
     p.write_text("3\nwater\nO 0 0 0\nH 0 0 1\nH 1 0 0\n")
+    assert PySCFParser.can_parse(str(p)) is True
+
+
+def test_can_parse_accepts_ase_extended_xyz_comment(tmp_path):
+    """ASE's extended XYZ has its own comment-line format
+    (Lattice="..." Properties=... ...).  We must accept that too;
+    detection must not depend on geomeTRIC's specific comment text."""
+    p = tmp_path / "ase.xyz"
+    p.write_text(
+        '3\n'
+        'Lattice="10 0 0 0 10 0 0 0 10" Properties=species:S:1:pos:R:3 pbc="T T T"\n'
+        'O 0 0 0\nH 0 0 1\nH 1 0 0\n'
+    )
+    assert PySCFParser.can_parse(str(p)) is True
+
+
+def test_can_parse_rejects_text_with_just_a_number(tmp_path):
+    """An integer first line is not enough -- a CSV with a count
+    header, or any random text starting with a number, must be
+    rejected.  The atom-line check (element + 3 floats) is what
+    keeps the detector honest."""
+    p = tmp_path / "fake.xyz"
+    p.write_text("42\nsome header text\nname,age,occupation\n"
+                 "alice,30,engineer\nbob,25,scientist\n")
     assert PySCFParser.can_parse(str(p)) is False
+
+
+def test_can_parse_rejects_zero_or_negative_atom_count(tmp_path):
+    """Atom count must be a positive integer.  0 isn't a structure;
+    a negative number can't even appear (`isdigit()` rejects it)."""
+    p = tmp_path / "zero.xyz"
+    p.write_text("0\nempty\n")
+    assert PySCFParser.can_parse(str(p)) is False
+
+
+def test_parse_xyz_without_geometric_comment_yields_none_energy(tmp_path):
+    """When the comment doesn't match the geomeTRIC pattern, the frame
+    is still captured but energy is None -- molwatch will render the
+    structure without an energy plot point at that index."""
+    p = tmp_path / "ase_traj.xyz"
+    p.write_text(
+        '3\nframe 0 from ASE\n'
+        'O 0 0 0\nH 0.957 0 0\nH -0.239 0.927 0\n'
+        '3\nframe 1 from ASE\n'
+        'O 0.01 0 0\nH 0.967 0 0\nH -0.229 0.927 0\n'
+    )
+    result = PySCFParser.parse(str(p))
+    assert len(result["frames"]) == 2
+    assert result["energies"] == [None, None]
+    assert result["frames"][0][0] == ["O", 0.0, 0.0, 0.0]
 
 
 def test_torn_frame_dropped(pyscf_traj_path):

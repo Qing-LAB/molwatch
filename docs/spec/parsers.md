@@ -256,13 +256,25 @@ will simply not render the residual axis for those runs.
 
 `parsers/pyscf.py`:
 
-* `name="pyscf"`, `label="PySCF / geomeTRIC trajectory"`,
-  `hint="geomeTRIC's streaming trajectory <job>_geom_optim.xyz (NOT
-  the PySCF .log)"`.
-* `can_parse`: line 0 is digits (atom count) AND line 1 matches
-  `Iteration <int> Energy <float>` (case-insensitive, regex).
-  This is the format geomeTRIC writes when called with `prefix=` —
-  what molbuilder's PySCF script generator uses.
+* `name="pyscf"`, `label="XYZ trajectory (PySCF / geomeTRIC /
+  generic multi-frame XYZ)"`, `hint="a multi-frame XYZ trajectory
+  -- e.g., geomeTRIC's <job>_geom_optim.xyz.  Generic XYZ with any
+  comment-line format is also accepted; energies are extracted only
+  when the comment matches the geomeTRIC `Iteration K Energy E`
+  pattern."`.
+* `can_parse` is structural, not banner-based.  Detection used to
+  require the comment line on row 1 to match
+  `Iteration <int> Energy <float>` -- that tied the parser to one
+  specific tool's comment format and rejected any other trajectory
+  writer (ASE, ChemShell, future geomeTRIC reformats, user
+  scripts).  The current detector accepts the file if:
+    - line 0 is a positive integer (≤ 1,000,000 — atom count),
+    - line 1 is anything (comment is informational only),
+    - the next ≤ 3 lines parse as atoms (element token + 3 floats).
+  Comment-line content is read by `parse()` but not by `can_parse()`.
+  When the comment matches the geomeTRIC pattern, energies are
+  extracted (Hartree → eV); otherwise the frame is captured with
+  `energy=None`.
 * Multi-frame XYZ; one frame per `Iteration K Energy E` block.
 * Energy converted Hartree → eV per spec.
 * `lattice` is always None (geomeTRIC trajectories carry no cell).
