@@ -13,8 +13,21 @@ build step — vanilla JS + 3Dmol.js + Plotly.
   — SIESTA · PySCF / geomeTRIC`.  Loader bar with: path input, hidden
   file picker, Load button, status span.
 * **Main**: three rows (third is conditional).
-  * Row 1 (`.viewer-row`): the 3Dmol viewer + a controls aside
-    (Style, Overlays, Playback fieldsets).
+  * Row 1 (`.viewer-row`): a 2-column grid -- the 3Dmol viewer on
+    the left and a `.controls` aside on the right.  Both columns
+    are locked to the same height via the `--viewer-height` CSS
+    variable (`clamp(360px, 52vh, 500px)`), so the panel layout is
+    responsive to viewport without one column ever stretching the
+    row taller than the other.
+
+    The controls aside is **tabbed**, not stacked: Style / Overlays
+    / Playback are a horizontal tab bar with one panel visible at a
+    time.  Above the tabs sits an always-visible **frame strip**
+    with the frame counter, prev/play/pause/next buttons, and the
+    frame slider -- the most-used controls stay reachable
+    regardless of which tab is open.  This keeps the controls
+    aside compact and prevents it from pushing the plot rows down
+    the page.
   * Row 2 (`.plots-row`): two Plotly canvases (energy vs step, max
     force vs step).
   * Row 3 (`.scf-row`, **engine-agnostic, hidden when empty**): a

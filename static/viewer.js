@@ -707,4 +707,40 @@
     $("speed").addEventListener("change", () => {
         if (state.playTimer) play();    // restart with new cadence
     });
+
+    /* ---- Tabs (Style / Overlays / Playback) ---------------------- */
+    /* Compact controls: only one panel visible at a time so the
+       aside never outgrows the viewer height.  CSS does the visibility
+       toggle via `is-active`; we just sync the classes here. */
+    document.querySelectorAll(".ctab").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            const target = btn.dataset.tab;
+            document.querySelectorAll(".ctab").forEach(
+                (b) => b.classList.toggle("is-active", b === btn)
+            );
+            document.querySelectorAll(".ctab-panel").forEach(
+                (p) => p.classList.toggle(
+                    "is-active", p.dataset.panel === target
+                )
+            );
+        });
+    });
+
+    /* ---- Re-fit 3Dmol on viewport resize ------------------------- */
+    /* The viewer height is `clamp(360px, 52vh, 500px)` -- it changes
+       when the user resizes the window or rotates a tablet.  3Dmol
+       caches canvas size at init, so we have to nudge it to refresh
+       its WebGL viewport whenever the container size actually changes;
+       debounce with rAF to avoid storming during drag. */
+    let _resizeRAF = 0;
+    const _onResize = () => {
+        cancelAnimationFrame(_resizeRAF);
+        _resizeRAF = requestAnimationFrame(() => {
+            if (viewer && typeof viewer.resize === "function") {
+                viewer.resize();
+                viewer.render();
+            }
+        });
+    };
+    window.addEventListener("resize", _onResize, { passive: true });
 })();

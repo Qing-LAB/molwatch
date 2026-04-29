@@ -45,9 +45,36 @@ Engine-native files (also supported):
     <div id="viewer"></div>
 
     <aside class="controls">
-      <fieldset>
-        <legend>Style</legend>
+      <!-- Always-visible frame strip: the slider is the most-used
+           control, so it sits above the tabs and is reachable
+           regardless of which tab panel is open. -->
+      <div class="frame-strip">
+        <div class="frame-strip-row">
+          <span class="frame-counter">Frame
+            <b id="frame-idx">0</b> / <b id="frame-tot">0</b>
+          </span>
+          <span class="frame-strip-buttons">
+            <button id="prev" title="Previous frame">&lsaquo;</button>
+            <button id="play" title="Play">&#9654;</button>
+            <button id="pause" title="Pause">&#9208;</button>
+            <button id="next" title="Next frame">&rsaquo;</button>
+          </span>
+        </div>
+        <input id="frame-slider" type="range"
+               min="0" max="0" value="0" step="1"
+               aria-label="Frame slider">
+      </div>
 
+      <!-- Three tab panels condense the previous stacked fieldsets;
+           only one is visible at a time so the controls aside never
+           outgrows the viewer height. -->
+      <nav class="control-tabs" role="tablist">
+        <button class="ctab is-active" data-tab="style"    role="tab">Style</button>
+        <button class="ctab"           data-tab="overlays" role="tab">Overlays</button>
+        <button class="ctab"           data-tab="playback" role="tab">Playback</button>
+      </nav>
+
+      <div class="ctab-panel is-active" data-panel="style" role="tabpanel">
         <label>Representation
           <select id="rep">
             <option value="stick" selected>stick</option>
@@ -77,39 +104,36 @@ Engine-native files (also supported):
           </select>
         </label>
 
-        <label><input type="checkbox" id="show-cell" checked> Show unit cell</label>
-      </fieldset>
+        <label class="check"><input type="checkbox" id="show-cell" checked>
+          Show unit cell</label>
+      </div>
 
-      <fieldset>
-        <legend>Overlays</legend>
-        <label><input type="checkbox" id="show-indices"> Show atom indices</label>
-        <label><input type="checkbox" id="show-forces"> Show force vectors</label>
+      <div class="ctab-panel" data-panel="overlays" role="tabpanel">
+        <label class="check"><input type="checkbox" id="show-indices">
+          Show atom indices</label>
+        <label class="check"><input type="checkbox" id="show-forces">
+          Show force vectors</label>
         <label>Arrow length scale (&Aring; per eV/&Aring;)
-          <input id="force-scale" type="range" min="0.1" max="5.0" step="0.1" value="1.0">
-          <span id="force-scale-val">1.0</span>
+          <span class="row-with-readout">
+            <input id="force-scale" type="range" min="0.1" max="5.0" step="0.1" value="1.0">
+            <span id="force-scale-val" class="readout">1.0</span>
+          </span>
         </label>
         <label>Hide |F| smaller than (eV/&Aring;)
           <input id="force-min" type="number" min="0" max="10" step="0.05" value="0.05">
         </label>
-        <label><input type="checkbox" id="highlight-max" checked> Highlight largest force</label>
-      </fieldset>
+        <label class="check"><input type="checkbox" id="highlight-max" checked>
+          Highlight largest force</label>
+      </div>
 
-      <fieldset>
-        <legend>Playback</legend>
-        <div class="row">
-          <button id="play">&#9654; Play</button>
-          <button id="pause">&#9208; Pause</button>
-          <button id="prev">&lsaquo;</button>
-          <button id="next">&rsaquo;</button>
-        </div>
-        <label>Frame <span id="frame-idx">0</span> / <span id="frame-tot">0</span>
-          <input id="frame-slider" type="range" min="0" max="0" value="0" step="1">
-        </label>
+      <div class="ctab-panel" data-panel="playback" role="tabpanel">
         <label>Speed (ms / frame)
           <input id="speed" type="number" min="20" max="3000" step="20" value="150">
         </label>
-        <label><input type="checkbox" id="loop" checked> Loop</label>
-      </fieldset>
+        <label class="check"><input type="checkbox" id="loop" checked>
+          Loop playback</label>
+        <p class="hint">Use the buttons and slider above to scrub frames.</p>
+      </div>
     </aside>
   </section>
 

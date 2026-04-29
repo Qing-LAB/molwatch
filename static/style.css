@@ -1,25 +1,33 @@
-/* molwatch -- dark theme, matching molbuilder.
+/* molwatch -- dark theme.
  *
- * Single :root block for colours so a future light theme is one
- * variable rewrite away.  Subtle surfaces, no decorative gradients.
+ * Single :root block for design tokens.  Layout uses a viewport-
+ * relative `--viewer-height` so the 3D viewer and the controls
+ * aside stay the same height (controls scroll internally if their
+ * tab content overflows).  This is what keeps the parameter panel
+ * from pushing the plot rows off-screen.
  */
 
 :root {
-    --bg-page:        #14171c;
-    --bg-card:        #1d2128;
-    --bg-card-hover:  #232831;
-    --bg-input:       #262b33;
-    --bg-input-focus: #2c323b;
-    --bg-fieldset:    #1f242c;
+    /* Surfaces (deeper page bg → cards stand out more clearly) */
+    --bg-page:        #10141a;
+    --bg-card:        #1a1f27;
+    --bg-card-hover:  #232830;
+    --bg-card-elev:   #232a35;
+    --bg-input:       #232831;
+    --bg-input-focus: #2a303a;
+    --bg-fieldset:    #1c2229;
 
-    --border-strong:  #3a3f48;
-    --border-soft:    #2c313a;
+    /* Borders */
+    --border-strong:  #353c47;
+    --border-soft:    #262d38;
 
-    --text-primary:   #e6e9ef;
+    /* Text */
+    --text-primary:   #e8ebf1;
     --text-secondary: #a8aebb;
-    --text-muted:     #6c7280;
+    --text-muted:     #6c7380;
     --text-mono:      #b8c4d6;
 
+    /* Accents + status */
     --accent:         #6ba6ff;
     --accent-hover:   #8ab8ff;
     --accent-strong:  #4a8de0;
@@ -29,11 +37,23 @@
     --error:          #f87171;
     --warning:        #fbbf24;
 
-    --radius:         7px;
-    --radius-sm:      4px;
+    /* Geometry tokens */
+    --radius:         8px;
+    --radius-sm:      5px;
     --gap:            14px;
-    --shadow-card:    0 1px 0 rgba(255, 255, 255, 0.02) inset,
-                      0 4px 12px rgba(0, 0, 0, 0.30);
+
+    /* Shadows: a single soft drop shadow for elevated surfaces. */
+    --shadow-card:    0 1px 0 rgba(255, 255, 255, 0.025) inset,
+                      0 6px 18px rgba(0, 0, 0, 0.32);
+    --shadow-soft:    0 1px 0 rgba(255, 255, 255, 0.02) inset,
+                      0 2px 6px rgba(0, 0, 0, 0.25);
+
+    /* The single source of truth for the height of the viewer +
+       controls row.  `clamp` makes it responsive to viewport: never
+       below 360px, never above 500px, around 52% of viewport height
+       in between.  Updating this one variable rescales both columns
+       in lockstep. */
+    --viewer-height:  clamp(360px, 52vh, 500px);
 }
 
 * { box-sizing: border-box; }
@@ -46,6 +66,7 @@ body {
     background: var(--bg-page);
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
 }
 
 /* ---- Header / loader bar ---- */
@@ -109,6 +130,7 @@ header h1 .tag {
     border: 1px solid var(--accent-strong);
     border-radius: var(--radius-sm);
     transition: background 120ms, border-color 120ms;
+    font-weight: 500;
 }
 .loader button:hover { background: var(--accent); border-color: var(--accent); }
 
@@ -116,8 +138,7 @@ header h1 .tag {
     color: var(--text-secondary);
     font-size: 0.88rem;
     margin-left: 4px;
-    /* Respect newlines in multi-line error messages (e.g. the
-       unsupported-format error lists each parser on its own line). */
+    /* Multi-line error messages render with their newlines preserved. */
     white-space: pre-line;
     line-height: 1.4;
 }
@@ -133,25 +154,148 @@ main {
     gap: var(--gap);
 }
 
+/*
+ * Viewer row: fixed-height viewer + a controls aside that's locked
+ * to the same height.  align-items: start prevents the aside from
+ * stretching to the viewer's height — any extra height triggers the
+ * aside's internal scroll instead of pushing the plots row down.
+ */
 .viewer-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 280px;
+    grid-template-columns: minmax(0, 1fr) 290px;
     gap: var(--gap);
-    min-height: 540px;
+    align-items: start;
 }
 
 #viewer {
     width: 100%;
-    height: 540px;
+    height: var(--viewer-height);
     border: 1px solid var(--border-strong);
     background: #fff;            /* viewer canvas keeps white for clarity */
     position: relative;
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius);
     overflow: hidden;
     box-shadow: var(--shadow-card);
 }
 
-.controls { display: flex; flex-direction: column; gap: 10px; }
+/* ---- Controls aside (tabbed) ---- */
+
+.controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    height: var(--viewer-height);
+    background: var(--bg-card);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow-card);
+}
+
+.frame-strip {
+    padding: 10px 14px 12px;
+    border-bottom: 1px solid var(--border-soft);
+    background: var(--bg-card-elev);
+}
+.frame-strip-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+.frame-counter {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-family: ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+}
+.frame-counter b {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+.frame-strip-buttons {
+    display: inline-flex;
+    gap: 4px;
+}
+.frame-strip-buttons button {
+    width: 30px;
+    padding: 3px 0;
+    font-size: 0.85rem;
+    text-align: center;
+}
+
+.control-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-soft);
+    background: var(--bg-card);
+}
+.ctab {
+    flex: 1;
+    background: transparent;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    padding: 8px 6px;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 120ms, border-color 120ms, background 120ms;
+}
+.ctab:hover { color: var(--text-primary); background: var(--bg-card-hover); }
+.ctab.is-active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    background: var(--accent-bg);
+}
+
+.ctab-panel {
+    display: none;
+    padding: 12px 14px 14px;
+    overflow-y: auto;
+    flex: 1;          /* fills the remaining height of .controls */
+}
+.ctab-panel.is-active { display: block; }
+
+.ctab-panel label {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin: 0 0 10px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    min-width: 0;
+}
+.ctab-panel label.check {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0;
+}
+.ctab-panel label > input,
+.ctab-panel label > select {
+    width: 100%;
+}
+.ctab-panel .row-with-readout {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.ctab-panel .row-with-readout > input { flex: 1; }
+.ctab-panel .readout {
+    font-family: ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+    font-size: 0.82rem;
+    color: var(--text-mono);
+    min-width: 28px;
+    text-align: right;
+}
+.ctab-panel .hint {
+    margin: 6px 0 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
 
 /* ---- Form controls (shared) ---- */
 
@@ -178,13 +322,14 @@ input:focus, select:focus {
 }
 input[type="checkbox"] {
     accent-color: var(--accent);
-    margin-right: 4px;
     cursor: pointer;
+    margin: 0;
 }
 input[type="range"] {
     accent-color: var(--accent);
     width: 100%;
     background: transparent;
+    cursor: pointer;
 }
 
 button {
@@ -195,53 +340,17 @@ button {
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
     padding: 4px 12px;
-    transition: background 120ms, border-color 120ms;
+    transition: background 120ms, border-color 120ms, color 120ms;
 }
-button:hover { background: var(--bg-card-hover); border-color: var(--accent-strong); }
+button:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--accent-strong);
+    color: var(--text-primary);
+}
 button:disabled {
     color: var(--text-muted);
     cursor: not-allowed;
     opacity: 0.6;
-}
-
-/* ---- Fieldsets ---- */
-
-fieldset {
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-sm);
-    padding: 6px 12px 10px;
-    background: var(--bg-fieldset);
-    min-width: 0;
-}
-fieldset legend {
-    font-weight: 600;
-    padding: 0 6px;
-    font-size: 0.85rem;
-    color: var(--accent);
-    letter-spacing: 0.01em;
-}
-fieldset label {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin: 6px 0;
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    min-width: 0;
-}
-fieldset label > input,
-fieldset label > select {
-    width: 100%;
-    margin-top: 1px;
-}
-fieldset label:has(> input[type="checkbox"]) {
-    flex-direction: row;
-    align-items: center;
-    gap: 6px;
-}
-fieldset .row {
-    display: flex; gap: 6px; margin: 4px 0;
-    flex-wrap: wrap;
 }
 
 /* ---- Plots row ---- */
@@ -252,32 +361,34 @@ fieldset .row {
     gap: var(--gap);
 }
 .plot {
-    height: 320px;
+    /* Slightly more compact than before so the dashboard fits a 1080p
+       laptop screen without scrolling. */
+    height: clamp(220px, 28vh, 300px);
     border: 1px solid var(--border-strong);
     background: var(--bg-card);
-    border-radius: var(--radius-sm);
-    box-shadow: var(--shadow-card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-soft);
 }
 
-/* ---- PySCF SCF-progress panel ---- */
+/* ---- SCF-progress panel (engine-agnostic) ---- */
 
 .scf-row {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    margin-top: 4px;
 }
 .scf-banner {
     background: var(--bg-card);
     border: 1px solid var(--border-strong);
     border-left: 3px solid var(--accent);
-    border-radius: var(--radius-sm);
-    padding: 8px 14px;
+    border-radius: var(--radius);
+    padding: 9px 14px;
     font-size: 0.92rem;
     display: flex;
     gap: 12px;
     align-items: baseline;
     flex-wrap: wrap;
+    box-shadow: var(--shadow-soft);
 }
 .scf-banner strong { color: var(--accent); font-weight: 600; }
 .scf-status {
@@ -290,16 +401,21 @@ fieldset .row {
     grid-template-columns: 1fr 1fr;
     gap: var(--gap);
 }
-.scf-plots .plot { height: 240px; }
+.scf-plots .plot { height: clamp(180px, 22vh, 230px); }
+
+/* ---- Responsive breakpoints ---- */
 
 @media (max-width: 980px) {
+    /* Stack viewer above controls; controls expand to natural height. */
     .viewer-row { grid-template-columns: 1fr; }
+    .controls   { height: auto; max-height: 60vh; }
     .plots-row  { grid-template-columns: 1fr; }
     .scf-plots  { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {
     .loader input[type="text"] { min-width: 0; flex: 1; }
     main, header { padding-left: 12px; padding-right: 12px; }
+    :root { --viewer-height: clamp(280px, 50vh, 380px); }
 }
 
 /* ---- Scrollbars ---- */
