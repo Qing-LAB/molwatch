@@ -24,7 +24,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional
 
-from .base import TrajectoryParser
+from .base import TrajectoryParser, ParsedTrajectory
 
 
 # `>> Start of run:  28-APR-2026  20:01:39`  (SIESTA v5.x; v4.x uses
@@ -133,7 +133,7 @@ class SiestaParser(TrajectoryParser):
         return prefix_hits >= cls._PREFIX_THRESHOLD
 
     @classmethod
-    def parse(cls, path: str) -> Dict[str, Any]:
+    def parse(cls, path: str) -> ParsedTrajectory:
         frames: List[List[List[Any]]] = []
         energies: List[Optional[float]] = []
         max_forces: List[Optional[float]] = []
@@ -315,6 +315,15 @@ class SiestaParser(TrajectoryParser):
         if current_scf:
             scf_history.append(current_scf)
 
+        # Schema invariant: every per-step list has length len(frames).
+        # The SCF run table on a partially-written or SCF-empty run
+        # may have fewer entries than there are committed frames; pad
+        # the tail with empty inner lists so the index-alignment
+        # contract holds (see docs/spec/parsers.md).
+        while len(scf_history) < len(frames):
+            scf_history.append([])
+        scf_history = scf_history[: len(frames)]
+
         return {
             "frames":        frames,
             "lattice":       lattice,
@@ -325,4 +334,7 @@ class SiestaParser(TrajectoryParser):
             "scf_history":   scf_history,
             "source_format": cls.name,
             "created_at":    created_at,
+            # SIESTA's main `.out` is the single source of truth for
+            # the run -- no sibling files to discover.
+            "missing_companions": [],
         }

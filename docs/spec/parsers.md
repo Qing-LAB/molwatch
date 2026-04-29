@@ -37,20 +37,46 @@ class TrajectoryParser(ABC):
 * Tolerant of in-progress files: torn frames at EOF are dropped, a
   partial step that has coordinates but no energy yet stores
   energy as `None`.
-* Returns a dict with a fixed schema:
+* Returns a dict matching :class:`parsers.base.ParsedTrajectory`.
+
+### Schema (canonical: `parsers/base.py`)
+
+The **single source of truth** for the parser-output schema is the
+``ParsedTrajectory`` TypedDict in `parsers/base.py`.  This document
+reproduces it for readers; if the two ever drift, the TypedDict
+wins and this doc is wrong.  The schema-conformance test suite
+(`tests/test_schema_conformance.py`) enforces the contract by
+running every registered parser against a minimal fixture and
+asserting the required keys, index alignment, JSON-strict-safety,
+and value types.
 
 ```python
-{
-    "frames":      List[List[List[Any]]],        # per step: [[el, x, y, z], ...]
-    "energies":    List[Optional[float]],        # eV per step
-    "max_forces":  List[Optional[float]],        # eV/Ang per step
-    "forces":      List[List[List[float]]],      # eV/Ang per atom per step (or [])
-    "iterations":  List[int],                    # length matches frames
-    "lattice":     Optional[List[List[float]]],  # 3x3 Ang or None
-    "scf_history": List[List[Dict[str, float]]], # see below
-    "source_format": str,                        # the parser's `name`
-}
+class ParsedTrajectory(TypedDict, total=False):
+    # Required (every parser must populate)
+    frames:        List[List[List[Any]]]        # per step: [[el, x, y, z], ...] (Ang)
+    energies:      List[Optional[float]]        # eV per step
+    max_forces:    List[Optional[float]]        # eV/Ang per step (max per-atom |F|)
+    forces:        List[List[List[float]]]      # eV/Ang per atom per step (or [])
+    iterations:    List[int]                    # length matches frames
+    lattice:       Optional[List[List[float]]]  # 3x3 Ang or None
+    scf_history:   List[List[ScfCycleEntry]]    # length matches frames; see below
+    source_format: str                          # parser's `name`, or sub-engine
+
+    # Optional (parsers MUST emit the key, possibly with None / [])
+    created_at:         Optional[str]           # ISO 8601 wall-clock start, or None
+    missing_companions: List[str]               # sibling files expected but absent
 ```
+
+Required vs optional:
+* The **required** set is `frames, energies, max_forces, forces,
+  iterations, lattice, scf_history, source_format`.  Every parser
+  MUST emit every required key.  Empty values are `[]` for lists
+  and `None` for `lattice`.
+* The **optional** set is `created_at, missing_companions`.  Parsers
+  MUST still emit these keys; they should set `created_at = None`
+  when no start timestamp is in the source file, and
+  `missing_companions = []` when all expected siblings were found
+  (or no siblings are needed).
 
 ### `scf_history` schema
 
@@ -95,10 +121,14 @@ accordingly (`|g| (eV/Å)` vs `dHmax (eV)`).  No cross-engine
 conversion is performed; comparing residuals across engines is not
 meaningful.
 
-`scf_history` may be `[]` when the parser couldn't find a companion
-log file (PySCF: `<job>.log` missing) or when the SCF section of
-the run output is empty.  Front-end consumers MUST handle the
-empty case gracefully (hide the SCF panel, don't crash).
+`scf_history` is index-aligned with `frames`: when the parser
+couldn't find a companion log file (PySCF: `<job>.log` missing) or
+the source file has no SCF tables yet, `scf_history` is filled with
+empty inner lists `[[] for _ in frames]` rather than being empty
+itself.  Front-end consumers MUST handle the all-empty case
+gracefully (hide the SCF panel, don't crash).  When sibling files
+are missing, the path is also surfaced via `missing_companions`
+so the UI can tell the user *why* the data is unavailable.
 
 The most-recent entry (`scf_history[-1]`) is "the current opt
 step's SCF" — what molwatch shows in its live SCF-progress panel.

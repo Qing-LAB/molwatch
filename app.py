@@ -26,7 +26,7 @@ import os
 import tempfile
 import time
 from threading import Lock
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, Type, TypedDict
 
 from flask import Flask, jsonify, render_template, request
 
@@ -35,6 +35,41 @@ from parsers import (
     detect_parser,
     parser_summary,
 )
+from parsers.base import TrajectoryParser, ParsedTrajectory
+
+
+# --------------------------------------------------------------------- #
+#  Process-global file-watching state                                   #
+# --------------------------------------------------------------------- #
+
+
+class WatchedFileState(TypedDict):
+    """The single 'currently-loaded file' record.
+
+    Held in module-global ``_state`` and guarded by ``_lock``.  All
+    fields start as `None` / `False` and are repopulated atomically
+    by :func:`/api/load` (the only entry point that mutates them).
+    Subsequent ``/api/data`` polls only read.
+    """
+    #: Absolute path the user typed; ``None`` when no file has been
+    #: loaded yet, or a path inside the upload temp dir for picker
+    #: uploads.
+    path: Optional[str]
+    #: ``os.path.getmtime(path)`` at the last successful parse.  Used
+    #: to short-circuit /api/data when the file hasn't changed.
+    mtime: Optional[float]
+    #: The most-recent parsed result, conforming to
+    #: :class:`parsers.base.ParsedTrajectory`.  ``None`` when nothing
+    #: has loaded yet.
+    data: Optional[ParsedTrajectory]
+    #: The TrajectoryParser subclass selected for this file by
+    #: :func:`detect_parser`.  Reused on /api/data polls to avoid
+    #: re-running detection against an already-known file.
+    parser: Optional[Type[TrajectoryParser]]
+    #: True when the active file was supplied via the file-picker
+    #: upload route (one-shot, no live polling).  False for
+    #: live-watched paths the user typed.
+    uploaded: bool
 
 
 app = Flask(__name__)
@@ -46,15 +81,15 @@ app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024   # 50 MB
 
 # Single global "current file" state.  A single user / single tab is
 # the expected usage so a plain dict + lock is enough; no need for
-# sessions.
+# sessions.  See :class:`WatchedFileState` for the field-level
+# contract.
 _lock = Lock()
-_state: Dict[str, Any] = {
+_state: WatchedFileState = {
     "path":     None,
     "mtime":    None,
     "data":     None,
-    "parser":   None,    # the TrajectoryParser class chosen for this file
-    "uploaded": False,   # True when the active file was uploaded via
-                         # the file-picker (one-shot, no live watching)
+    "parser":   None,
+    "uploaded": False,
 }
 
 # Track the last temp file we created from a file-picker upload so

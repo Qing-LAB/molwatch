@@ -240,9 +240,16 @@ def test_scf_history_units_converted(tmp_path):
 
 
 def test_scf_history_empty_when_log_absent(pyscf_traj_path):
-    """No <prefix>.log next to the trajectory -> scf_history = []."""
+    """No <prefix>.log next to the trajectory -> scf_history is one
+    empty inner list per frame (index-aligned with frames per the
+    schema invariant; see docs/spec/parsers.md).  The .log path is
+    surfaced via missing_companions so the UI can explain the
+    absence."""
     result = PySCFParser.parse(pyscf_traj_path)
-    assert result["scf_history"] == []
+    n = len(result["frames"])
+    assert result["scf_history"] == [[] for _ in range(n)]
+    # The expected log path is reported as missing.
+    assert any(p.endswith(".log") for p in result["missing_companions"])
 
 
 def test_scf_history_per_cycle_keys(tmp_path):

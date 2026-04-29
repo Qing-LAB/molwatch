@@ -222,24 +222,37 @@ def test_scf_history_per_cycle_keys(siesta_path):
 
 
 def test_scf_history_real_multi_cycle_run(tmp_path):
-    """A SIESTA-style run with multiple SCF iterations within one CG
-    step splits correctly: iscf=1 marks each new run boundary."""
+    """A SIESTA-style run with multiple SCF iterations within each CG
+    step splits correctly: iscf=1 marks each new run boundary, and the
+    per-step scf_history list is index-aligned with frames per the
+    schema invariant (see docs/spec/parsers.md)."""
     sample = (
         "Welcome to SIESTA\n"
         "redata: prelude\n"
-        # First CG step: 3 SCF iterations
+        # First CG step
+        "outcoor: Atomic coordinates (Ang):\n"
+        "   1.00000000    2.00000000    3.00000000   1       1  C\n"
+        "\n"
         "   scf:    1   -100.0   -100.5   -100.5   0.10  -1.0   0.5\n"
         "   scf:    2   -100.4   -100.7   -100.7   0.05  -1.0   0.1\n"
         "   scf:    3   -100.45  -100.71  -100.71  0.01  -1.0   0.01\n"
         "SCF Convergence by DM+H criterion\n"
-        # Second CG step: iscf restarts at 1
+        "siesta: E_KS(eV) =          -100.71\n"
+        # Second CG step
+        "outcoor: Atomic coordinates (Ang):\n"
+        "   1.10000000    2.10000000    3.10000000   1       1  C\n"
+        "\n"
         "   scf:    1   -101.0   -101.2   -101.2   0.08  -1.0   0.4\n"
         "   scf:    2   -101.1   -101.3   -101.3   0.02  -1.0   0.05\n"
         "SCF Convergence by DM+H criterion\n"
+        "siesta: E_KS(eV) =          -101.3\n"
     )
     p = tmp_path / "multi.out"
     p.write_text(sample)
-    runs = SiestaParser.parse(str(p))["scf_history"]
+    result = SiestaParser.parse(str(p))
+    runs = result["scf_history"]
+    # Schema invariant: scf_history aligned with frames.
+    assert len(runs) == len(result["frames"])
     assert len(runs) == 2
     assert len(runs[0]) == 3
     assert len(runs[1]) == 2

@@ -50,7 +50,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional
 
-from .base import TrajectoryParser
+from .base import TrajectoryParser, ParsedTrajectory
 
 
 _BEGIN_RE = re.compile(r"====\s*molwatch\s+step\s+(\d+)\s+begin\s*====")
@@ -88,7 +88,7 @@ class MolwatchLogParser(TrajectoryParser):
         return any(_HEADER_RE.match(line) for line in head)
 
     @classmethod
-    def parse(cls, path: str) -> Dict[str, Any]:
+    def parse(cls, path: str) -> ParsedTrajectory:
         engine = "molwatch"
         # `# created: <ISO8601>` line at the top of the log; populated
         # by molbuilder's emitter.  The UI uses this together with the
@@ -267,4 +267,7 @@ class MolwatchLogParser(TrajectoryParser):
             "scf_history":   scf_history,
             "created_at":    created_at,
             "source_format": engine,
+            # The unified .molwatch.log is by construction the single
+            # source of truth -- no siblings to look for.
+            "missing_companions": [],
         }

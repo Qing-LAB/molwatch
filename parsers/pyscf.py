@@ -24,9 +24,9 @@ from __future__ import annotations
 import math
 import os
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-from .base import TrajectoryParser
+from .base import TrajectoryParser, ParsedTrajectory
 
 
 # Hartree -> eV
@@ -124,7 +124,7 @@ class PySCFParser(TrajectoryParser):
             return False
 
     @classmethod
-    def parse(cls, path: str) -> Dict[str, Any]:
+    def parse(cls, path: str) -> ParsedTrajectory:
         frames: List[List[List[Any]]] = []
         energies: List[Optional[float]] = []
         iterations: List[int] = []
@@ -182,16 +182,29 @@ class PySCFParser(TrajectoryParser):
                 energies.append(energy_eV)
                 iterations.append(step_idx)
 
-        # Optional: pull max-force per step from the companion .qdata.
-        # geomeTRIC writes `<prefix>.qdata`, where this file is named
-        # `<prefix>_optim.xyz`.  Same prefix, so derive it:
-        max_forces = cls._read_qdata_forces(path, len(frames))
+        # Sibling-file discovery.  Each helper returns its data plus
+        # the canonical path it expected to find -- so we can build
+        # missing_companions for the front-end.  The user can then
+        # tell "force data missing because qdata isn't there" apart
+        # from "force data missing because the run hasn't computed
+        # forces yet."
+        max_forces, qdata_missing = cls._read_qdata_forces(path, len(frames))
+        scf_history, log_missing  = cls._read_scf_history(path)
 
-        # PySCF's main .log has the SCF iteration tables (one block per
-        # geom-opt step's electronic problem).  Surface this as
-        # scf_history so molwatch can show progress within the current
-        # geom-opt step.
-        scf_history = cls._read_scf_history(path)
+        # Schema invariant: scf_history is index-aligned with frames.
+        # The PySCF .log records SCF runs in lockstep with opt steps,
+        # so on a complete run len(scf_history) == len(frames); but on
+        # a partial / log-less run we pad / truncate to keep the
+        # alignment contract.  See docs/spec/parsers.md.
+        while len(scf_history) < len(frames):
+            scf_history.append([])
+        scf_history = scf_history[: len(frames)]
+
+        missing_companions: List[str] = []
+        if qdata_missing is not None:
+            missing_companions.append(qdata_missing)
+        if log_missing is not None:
+            missing_companions.append(log_missing)
 
         return {
             "frames":        frames,
@@ -202,23 +215,33 @@ class PySCFParser(TrajectoryParser):
             "forces":        [[] for _ in frames],
             "scf_history":   scf_history,
             "source_format": cls.name,
-            # geomeTRIC's `_optim.xyz` carries no start timestamp.  The
-            # PySCF main `<job>.log` (sibling) has one but parsing it
-            # for time alone isn't worth the dependency; the front-end
-            # falls back to file mtime when created_at is None.
+            # geomeTRIC's `_optim.xyz` carries no start timestamp.
+            # PySCF's `.log` does, but parsing it for time alone isn't
+            # worth the cost; the UI falls back to file mtime.
             "created_at":    None,
+            "missing_companions": missing_companions,
         }
 
     # ------------------------------------------------------------- #
     #  qdata-companion helper                                        #
     # ------------------------------------------------------------- #
     @classmethod
-    def _read_qdata_forces(cls, traj_path: str,
-                           n_frames: int) -> List[Optional[float]]:
-        """Try `<prefix>.qdata` next to the trajectory.  Returns a
-        list of max-force values (eV/Ang) of length ``n_frames``;
-        each entry is ``None`` if the file isn't there or the entry
-        is missing for that step."""
+    def _read_qdata_forces(
+        cls, traj_path: str, n_frames: int
+    ) -> Tuple[List[Optional[float]], Optional[str]]:
+        """Try `<prefix>.qdata{,.txt}` next to the trajectory.
+
+        Returns ``(forces_per_step, missing_path)``:
+
+        * ``forces_per_step`` is a list of max-force values (eV/Ang)
+          of length ``n_frames``; each entry is ``None`` if the file
+          isn't there or the entry is missing for that step.
+        * ``missing_path`` is the canonical expected path (``.qdata.txt``
+          variant) when no qdata file was found, or ``None`` when one
+          was found and read.  The caller surfaces this as part of
+          ``missing_companions`` so the UI can explain why max-force
+          data is unavailable.
+        """
         base, fname = os.path.split(traj_path)
         # geomeTRIC's pair: <prefix>_optim.xyz <-> <prefix>.qdata.txt
         # But qdata extension varies across versions; try a couple.
@@ -231,7 +254,7 @@ class PySCFParser(TrajectoryParser):
         ]
         qpath = next((p for p in candidates if os.path.isfile(p)), None)
         if qpath is None:
-            return [None] * n_frames
+            return [None] * n_frames, candidates[0]
 
         # Per-step: ENERGY starts a frame, GRADIENT (for THAT frame)
         # follows.  We flush the current frame's max only on the NEXT
@@ -269,22 +292,31 @@ class PySCFParser(TrajectoryParser):
                 if in_frame:
                     max_forces.append(step_max)
         except OSError:
-            return [None] * n_frames
+            return [None] * n_frames, candidates[0]
 
         # Pad / truncate to align with frames.
         if len(max_forces) < n_frames:
             max_forces.extend([None] * (n_frames - len(max_forces)))
-        return max_forces[:n_frames]
+        return max_forces[:n_frames], None
 
     # ------------------------------------------------------------- #
     #  PySCF-log SCF-iteration helper                                #
     # ------------------------------------------------------------- #
     @classmethod
-    def _read_scf_history(cls, traj_path: str) -> List[List[Dict[str, float]]]:
+    def _read_scf_history(
+        cls, traj_path: str
+    ) -> Tuple[List[List[Dict[str, float]]], Optional[str]]:
         """Try ``<prefix>.log`` next to the trajectory.
 
-        Returns a list of SCF runs, where each run is a list of
-        per-cycle dicts:
+        Returns ``(scf_history, missing_path)``:
+
+        * ``scf_history``: list of SCF runs, where each run is a list
+          of per-cycle dicts (see schema below).  Empty list when no
+          log file was found or it had no SCF tables.
+        * ``missing_path``: canonical expected log path when no log
+          was found, or ``None`` when one was found and read.
+
+        Per-cycle dict schema:
 
             [
               [   # geom-opt step 0
@@ -316,7 +348,7 @@ class PySCFParser(TrajectoryParser):
             stem = stem[: -len("_geom")]
         log_path = os.path.join(base, stem + ".log")
         if not os.path.isfile(log_path):
-            return []
+            return [], log_path
 
         runs: List[List[Dict[str, float]]] = []
         current: List[Dict[str, float]] = []
@@ -356,5 +388,5 @@ class PySCFParser(TrajectoryParser):
                 if current:
                     runs.append(current)
         except OSError:
-            return []
-        return runs
+            return [], log_path
+        return runs, None
