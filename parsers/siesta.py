@@ -134,6 +134,28 @@ class SiestaParser(TrajectoryParser):
         return prefix_hits >= cls._PREFIX_THRESHOLD
 
     @classmethod
+    def common_mistakes(cls, path: str) -> Optional[str]:
+        """SIESTA's most common foot-gun: the user pointed at the
+        ``.fdf`` (the input file molbuilder generated) instead of
+        the ``.out`` SIESTA writes when run.  We can spot this from
+        the file extension alone -- ``.fdf`` is unambiguous."""
+        import os
+        base = os.path.basename(path)
+        if not base.lower().endswith(".fdf"):
+            return None
+        stem = base[:-len(".fdf")]
+        return (
+            f"That looks like a SIESTA INPUT file (.fdf), not the "
+            f"output.  SIESTA writes its output to wherever you "
+            f"redirected stdout, typically:\n"
+            f"    mpirun siesta < {base} > {stem}.out\n"
+            f"Load '{stem}.out' (or whatever you redirected to) "
+            f"instead.  If you generated this run with molbuilder, "
+            f"there's also a '{stem}.molwatch.log' alongside it that "
+            f"shows the initial geometry immediately."
+        )
+
+    @classmethod
     def parse(cls, path: str) -> ParsedTrajectory:
         frames: List[List[List[Any]]] = []
         energies: List[Optional[float]] = []

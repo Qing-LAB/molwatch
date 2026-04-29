@@ -76,6 +76,37 @@ class PySCFParser(TrajectoryParser):
     _MAX_PLAUSIBLE_ATOMS = 1_000_000
 
     @classmethod
+    def common_mistakes(cls, path: str) -> Optional[str]:
+        """PySCF's most common foot-gun: the user pointed at the
+        runtime ``<job>.log`` (verbose PySCF output) instead of the
+        geomeTRIC streaming trajectory ``<job>_geom_optim.xyz``.
+
+        We trigger only on filename patterns that look unambiguously
+        like a PySCF run (``.log`` plus ``pyscf`` / ``_relax`` /
+        ``geom`` in the stem) so we don't spam the suggestion for
+        SIESTA users whose main output is also frequently named
+        ``*.log``.
+        """
+        base = os.path.basename(path)
+        lower = base.lower()
+        if not lower.endswith(".log"):
+            return None
+        if not any(tag in lower for tag in ("pyscf", "_relax", "geom")):
+            return None
+        # Strip a few common suffixes to get back to the job stem.
+        stem = base
+        for suffix in ("_geom.log", "_pyscf.log", ".log"):
+            if stem.endswith(suffix):
+                stem = stem[: -len(suffix)]
+                break
+        return (
+            f"Looks like a PySCF run -- load the geomeTRIC trajectory "
+            f"'{stem}_geom_optim.xyz' instead.  If you generated this "
+            f"run with molbuilder, '{stem}.molwatch.log' is the "
+            f"preferred single-file input."
+        )
+
+    @classmethod
     def can_parse(cls, path: str) -> bool:
         """Structural XYZ check, not banner-matching.
 

@@ -209,10 +209,12 @@ for the most common foot-guns (`.fdf` is the SIESTA *input*, not
 output; `.log` is PySCF runtime output, not the geomeTRIC
 trajectory).
 
-The hint logic currently lives directly in `detect_parser`.  If a
-fourth or fifth parser arrives with its own foot-guns, this should
-be refactored to a per-parser `common_mistakes()` method (see
-"Future work" below).
+The hint logic lives on each parser class via the
+``common_mistakes(path)`` classmethod.  ``detect_parser`` simply
+asks every registered parser for its hints when no `can_parse`
+match is found and concatenates them.  Adding a fourth or fifth
+parser with new foot-guns means overriding ``common_mistakes`` on
+that parser -- no change to the registry function.
 
 ### 4.4  Conformance enforcement: `tests/test_schema_conformance`
 
@@ -383,9 +385,6 @@ relevant sites also flag them.
 These are known improvements not yet implemented; they would each
 be their own focused commit / session.
 
-- **Per-parser `common_mistakes()` method** to move the hardcoded
-  `.fdf` / `.log` hint logic out of `detect_parser` into the
-  parser classes themselves.  Composable for future parsers.
 - **Modular `viewer.js`** — the IIFE could host named sub-objects
   (`molwatch.ui`, `molwatch.poll`, `molwatch.plots`) for clarity
   on a 800+-line file, without introducing a build step.

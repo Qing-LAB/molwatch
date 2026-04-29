@@ -97,6 +97,36 @@ def test_unknown_format_fdf_suggests_out_file(tmp_path):
     assert "siesta.molwatch.log" in msg
 
 
+def test_common_mistakes_lives_on_parser_classes(tmp_path):
+    """Per-parser foot-gun hints are now the parser's responsibility,
+    not the registry's.  Adding a new parser with new mistakes means
+    overriding `common_mistakes` on that parser, NOT editing
+    `detect_parser`."""
+    from parsers.siesta import SiestaParser
+    from parsers.pyscf import PySCFParser
+    from parsers.molwatch_log import MolwatchLogParser
+
+    # SIESTA owns the .fdf hint.
+    fdf = tmp_path / "siesta.fdf"
+    fdf.write_text("SystemName test\n")
+    sm = SiestaParser.common_mistakes(str(fdf))
+    assert sm is not None
+    assert "INPUT" in sm or "input" in sm
+    assert "siesta.out" in sm
+
+    # SiestaParser doesn't claim a PySCF .log -- only PySCFParser does.
+    log = tmp_path / "myrun_pyscf_relax.log"
+    log.write_text("PySCF runtime log\n")
+    assert SiestaParser.common_mistakes(str(log)) is None
+    pm = PySCFParser.common_mistakes(str(log))
+    assert pm is not None
+    assert "_geom_optim.xyz" in pm
+
+    # MolwatchLogParser doesn't override; default returns None.
+    assert MolwatchLogParser.common_mistakes(str(fdf)) is None
+    assert MolwatchLogParser.common_mistakes(str(log)) is None
+
+
 def test_unknown_format_generic_hint_points_at_docs(tmp_path):
     """For files that don't match either of the targeted hints, the
     error message must still steer the user somewhere useful -- the

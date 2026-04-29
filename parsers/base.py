@@ -190,3 +190,23 @@ class TrajectoryParser(ABC):
         docstring for the field-level contract, including which keys
         are required and which optional.
         """
+
+    @classmethod
+    def common_mistakes(cls, path: str) -> Optional[str]:
+        """Return a hint message if ``path`` looks like a common
+        mis-load for this parser, or ``None`` otherwise.
+
+        The registry calls this on every parser when ``detect_parser``
+        fails to find a match.  Each parser knows the foot-guns
+        specific to its format (e.g., the SIESTA parser knows users
+        sometimes load the ``.fdf`` input file by mistake; the PySCF
+        parser knows users sometimes grab the runtime ``.log``
+        instead of the geomeTRIC trajectory).  Returning a
+        non-``None`` string adds it to the error message users see.
+
+        Default returns ``None`` -- override to declare your foot-guns.
+        Multiple parsers may return non-``None`` for the same path;
+        the registry concatenates all hints, so each parser should
+        return only its own guidance, no boilerplate.
+        """
+        return None

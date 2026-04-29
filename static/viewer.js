@@ -1,4 +1,4 @@
-/* SIESTA live viewer -- 3Dmol viewport + Plotly traces.
+/* molwatch live viewer -- 3Dmol viewport + Plotly traces.
  *
  * Frames are loaded once into a 3Dmol "movie" model (addModelsAsFrames)
  * and the slider / playback simply calls viewer.setFrame(idx), which is
@@ -7,6 +7,39 @@
  *
  * Polling cadence: ~15 s (CG steps from SIESTA on a real workload take
  * far longer than that, so the network traffic is negligible).
+ *
+ * ============================================================
+ * FILE LAYOUT (search for the section divider lines to jump)
+ * ============================================================
+ *
+ *   State                          mutable single-source-of-truth obj
+ *   Helpers                        setStatus
+ *   3Dmol viewer                   framesToMultiXyz, styleSpec,
+ *                                  applyStyle, drawCell
+ *   Overlays                       drawIndices
+ *   Force-vector overlay           drawForces
+ *   Model + frame display          rebuildModel, showFrame
+ *   Plots (Plotly)                 makePlots, renderScfProgress
+ *   Data flow / polling / status   applyNewData, elapsedSinceStart,
+ *                                  formatDuration, startPolling,
+ *                                  stopPolling
+ *   Playback                       step, play, pause
+ *   Event wiring (DOMContentLoaded scope)
+ *     - path-input / load button   live polling vs file upload
+ *     - frame slider               scrub
+ *     - style controls             rep, radius, colorscheme, bg
+ *     - overlay controls           show-indices, show-forces, etc.
+ *     - playback buttons           prev/play/pause/next
+ *     - Save current frame as XYZ  save-frame button
+ *     - Tabs (Style/Overlays/Playback)
+ *     - Window resize -> 3Dmol.resize()
+ *
+ * The IIFE keeps every helper module-private.  Each section is
+ * cohesive and could be moved into a sub-namespace (`MW.ui.*`,
+ * `MW.plots.*`, etc.) without changing behaviour -- see
+ * docs/architecture.md §9 (Future work) for the planned shape.
+ * Until that lands, the section dividers below are the
+ * navigational substitute for module structure.
  */
 
 (function () {
