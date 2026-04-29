@@ -47,23 +47,61 @@ class SiestaParser(TrajectoryParser):
     label = "SIESTA .out / .log"
     hint  = "the main SIESTA run output (run.out, siesta.log, etc.)"
 
-    # Format markers we look for in the file head to claim it.  These
-    # strings appear in every SIESTA run somewhere in the first ~40 lines.
-    _MARKERS = (
-        "Welcome to SIESTA",
+    # `can_parse` is content-based, not banner-based.  SIESTA reshuffles
+    # its header text across versions (v4.x had `Welcome to SIESTA`, v5
+    # has `*  WELCOME TO SIESTA  *` plus a top-of-file `Executable:
+    # siesta` line, future versions may reformat again), so we don't
+    # rely on any specific banner string.  We accept the file if EITHER:
+    #
+    #   1. ANY one strong, content-bearing marker is present in the
+    #      first 300 lines.  These are structural elements of SIESTA
+    #      output -- block headers (`outcoor:`, `outcell:`), step
+    #      banners (`Begin CG opt`), characteristic key lines
+    #      (`siesta: System type`, `siesta: Atomic forces`).  They
+    #      don't depend on banner text.
+    #   2. We see at least 3 lines prefixed by `siesta:` or `redata:`
+    #      in those 300 lines.  Real SIESTA output has dozens of such
+    #      lines, so 3 is a near-certain match while still rejecting
+    #      arbitrary log files that happen to contain the word
+    #      "siesta:" once or twice.
+    #
+    # 300 lines is a generous scan window: a real SIESTA output has
+    # plenty of structural markers within the first 100 lines on small
+    # runs, and within ~700-800 on big v5 runs whose preamble grew.
+    _STRONG_MARKERS = (
+        "Executable      : siesta",      # v5.x line 1
+        "WELCOME TO SIESTA",             # v5.x banner (uppercase)
+        "Welcome to SIESTA",             # v4.x banner (mixed case)
         "siesta: System type",
-        "siesta:                                ! ",   # banner line
-        "redata: ",
+        "siesta: Atomic forces",
+        "outcoor: Atomic coordinates",
+        "outcell: Unit cell vectors",
+        "Begin CG opt",
+        "Begin MD opt",
+        "Begin Broyden opt",
+        "Begin FIRE opt",
     )
+    _PREFIX_MARKERS = ("siesta:", "redata:")
+    _SCAN_LINES = 300
+    _PREFIX_THRESHOLD = 3
 
     @classmethod
     def can_parse(cls, path: str) -> bool:
         try:
             with open(path, "r", errors="replace") as fh:
-                head = "".join(next(fh, "") for _ in range(80))
+                head_lines = [next(fh, "") for _ in range(cls._SCAN_LINES)]
         except OSError:
             return False
-        return any(m in head for m in cls._MARKERS)
+        head = "".join(head_lines)
+        # 1. Any strong content marker wins immediately.
+        if any(m in head for m in cls._STRONG_MARKERS):
+            return True
+        # 2. Otherwise, count `siesta:` / `redata:` lines.
+        prefix_hits = sum(
+            1 for ln in head_lines
+            if any(ln.lstrip().startswith(p) for p in cls._PREFIX_MARKERS)
+        )
+        return prefix_hits >= cls._PREFIX_THRESHOLD
 
     @classmethod
     def parse(cls, path: str) -> Dict[str, Any]:

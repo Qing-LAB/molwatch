@@ -217,9 +217,22 @@ will simply not render the residual axis for those runs.
 
 * `name="siesta"`, `label="SIESTA .out / .log"`, `hint="the main
   SIESTA run output (run.out, siesta.log, etc.)"`.
-* `can_parse`: matches if the file's first 80 lines contain any of
-  `"Welcome to SIESTA"`, `"siesta: System type"`, the banner line, or
-  `"redata: "`.
+* `can_parse` is content-based, not banner-based.  Banners reformat
+  across versions (v4.x had `Welcome to SIESTA` mixed-case; v5.x
+  has `*  WELCOME TO SIESTA  *` and a top-of-file
+  `Executable      : siesta` line; future versions may reshuffle
+  again).  The detector accepts the file if **either**:
+    1. any one *strong content marker* appears in the first 300
+       lines -- `outcoor: Atomic coordinates`, `outcell: Unit cell
+       vectors`, `Begin CG opt`, `siesta: System type`, `siesta:
+       Atomic forces`, plus banner text from v4.x and v5.x as
+       safety; **or**
+    2. there are at least 3 lines in the first 300 starting with
+       `siesta:` or `redata:` (real SIESTA output has dozens of
+       these; 3 is a near-certain match while still rejecting
+       arbitrary log files).
+  Either branch is sufficient on its own; we deliberately don't
+  require any specific banner string.
 * Per step extracts:
   * coordinates from `outcoor: Atomic coordinates (Ang):` blocks
   * total energy from `siesta: E_KS(eV) = ...`

@@ -105,6 +105,40 @@ def test_can_parse_rejects_non_siesta(tmp_path):
     assert SiestaParser.can_parse(str(p)) is False
 
 
+def test_can_parse_siesta_v5_banner(tmp_path):
+    """SIESTA 5.x changed the banner: line 1 is `Executable      : siesta`
+    and the welcome banner reads `*  WELCOME TO SIESTA  *` (uppercase,
+    surrounded by asterisks).  The mixed-case `Welcome to SIESTA` marker
+    that worked for v4.x doesn't match.  Either v5 marker must be
+    sufficient on its own -- on a real v5 run, the later-but-stable
+    markers (`siesta: System type`, `redata:`) only appear hundreds of
+    lines into the file, past the parser's 80-line scan window."""
+    v5_head = (
+        "Executable      : siesta\n"
+        "Version         : 5.4.2-11-g4e9a46060\n"
+        "Architecture    : x86_64\n"
+        "Compiler version: GNU-13.3.0\n"
+        "Compiler flags  : -O3\n"
+        "Parallelisations: MPI\n"
+        "Lua support\n"
+        "DFT-D3 support\n"
+        "\n"
+        "Runtime information:\n"
+        "* Directory : /tmp/run\n"
+        "* Running in serial mode.\n"
+        ">> Start of run:  28-APR-2026  20:17:06\n"
+        "\n"
+        "                           *********************** \n"
+        "                           *  WELCOME TO SIESTA  * \n"
+        "                           *********************** \n"
+        "\n"
+        "(...lots of output before any `redata:` line ...)\n"
+    )
+    p = tmp_path / "v5.out"
+    p.write_text(v5_head)
+    assert SiestaParser.can_parse(str(p)) is True
+
+
 def test_torn_frame_dropped_at_eof(siesta_path):
     result = SiestaParser.parse(siesta_path)
     assert len(result["frames"]) == 2
