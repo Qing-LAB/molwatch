@@ -35,13 +35,23 @@ build step — vanilla JS + 3Dmol.js + Plotly.
     Plotly canvases (SCF energy + a residual within the current
     step).  Visible iff `state.data.scf_history` is non-empty.
     Both engines populate this row via the same `scf_history`
-    schema; the UI selects the residual key + axis label by
-    engine:
-    * PySCF: residual = `|g|` (eV/Å), step label = "Geom-opt step".
-    * SIESTA: residual = `dHmax` (eV), step label = "CG/MD step".
-    Selection is data-driven (key sniff on `scf_history[-1][0]`),
-    not on `state.format`, so future parsers that expose either
-    set of keys work without UI changes.
+    schema; the UI adapts three things by engine:
+    * **Banner title** (`#scf-title`): "PySCF SCF progress" /
+      "SIESTA SCF progress" / "SCF progress" (fallback).  Set
+      from `state.format`, never hard-coded in the template.
+    * **Step label** in the status line: "Geom-opt step" (PySCF) /
+      "CG/MD step" (SIESTA) / "Opt step" (fallback).
+    * **Residual axis**: `|g|` (eV/Å) when the cycle dicts carry
+      `gnorm` (PySCF), `dHmax` (eV) when they carry `dHmax`
+      (SIESTA).  Residual selection is data-driven (key sniff on
+      `scf_history[-1][0]`), not from `state.format`, so future
+      parsers that expose either set of keys work without UI
+      changes.
+
+    The HTML template starts with the generic "SCF progress" text
+    in `#scf-title` so the placeholder is meaningful before any
+    file is loaded; `renderScfProgress()` rewrites it on every
+    refresh to match the current engine.
 * Mobile breakpoint at 980 px collapses every plot row to single
   column.  640 px tightens header + plot heights.
 

@@ -142,13 +142,15 @@ Engine-native files (also supported):
     <div id="force-plot" class="plot"></div>
   </section>
 
-  <!-- PySCF-only section: SCF-iteration progress for the most recent
-       geom-opt step.  Hidden when the loaded file has no scf_history
-       (e.g. SIESTA, or the PySCF .log isn't sitting next to the
-       trajectory). -->
+  <!-- Engine-agnostic SCF-iteration progress for the most recent
+       opt step.  Hidden when the loaded file has no scf_history
+       (e.g. SIESTA whose `scf:` lines weren't yet captured, or a
+       PySCF run whose .log wasn't found next to the trajectory).
+       The banner title and the residual axis adapt to the engine
+       at render time -- see renderScfProgress() in viewer.js. -->
   <section class="scf-row" id="scf-section" hidden>
     <div class="scf-banner">
-      <strong>PySCF SCF progress</strong>
+      <strong id="scf-title">SCF progress</strong>
       <span id="scf-status" class="scf-status"></span>
     </div>
     <div class="scf-plots">

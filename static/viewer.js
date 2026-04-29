@@ -433,11 +433,26 @@
             residual = null;
         }
 
-        // Status banner: step, current cycle, residual, ΔE.  Engine
-        // label distinguishes "Geom-opt step" (PySCF) from "CG/MD step"
-        // (SIESTA) for clarity.
-        const stepLabel = (state.format === "siesta")
-            ? "CG/MD step" : "Geom-opt step";
+        // Engine-aware labels.  state.format is whatever the parser
+        // wrote to source_format -- "siesta", "pyscf", or "molwatch"
+        // when the file was a unified molwatch.log without an engine
+        // header (the molwatch.log emitter normally fills in "siesta"
+        // or "pyscf" so this last case is the rare fallback).
+        let bannerTitle, stepLabel;
+        if (state.format === "siesta") {
+            bannerTitle = "SIESTA SCF progress";
+            stepLabel   = "CG/MD step";
+        } else if (state.format === "pyscf") {
+            bannerTitle = "PySCF SCF progress";
+            stepLabel   = "Geom-opt step";
+        } else {
+            // Generic fallback: don't lie about which engine produced
+            // the data when we don't know.
+            bannerTitle = "SCF progress";
+            stepLabel   = "Opt step";
+        }
+        $("scf-title").textContent = bannerTitle;
+
         const lastDe = current[current.length - 1].delta_E;
         let statusText = stepLabel + " " + stepIdx
             + " — SCF cycle " + cycles[cycles.length - 1]
