@@ -110,31 +110,43 @@ output without knowing how each parser is implemented internally.
 
 ```
 molwatch/
-├── app.py                  # Flask app: routes, polling, upload handling
-├── parsers/                # Parser plug-in subsystem
-│   ├── __init__.py         # Registry + detect_parser + UnknownFormatError
-│   ├── base.py             # TrajectoryParser ABC + ParsedTrajectory schema
-│   ├── _result.py          # assemble_trajectory: schema enforcement
-│   ├── molwatch_log.py     # .molwatch.log unified format (preferred)
-│   ├── siesta.py           # SIESTA v4.x / v5.x .out / .log
-│   └── pyscf.py            # geomeTRIC trajectory + .qdata + .log siblings
-├── templates/index.html    # Single-page UI markup
-├── static/
-│   ├── style.css           # Dark theme, responsive layout via --viewer-height
-│   └── viewer.js           # 3Dmol viewer + Plotly + polling + tabs
-├── tests/                  # pytest suite
+├── molwatch/                  # The Python package
+│   ├── __init__.py
+│   ├── web.py                 # Flask app + run_server (used by `serve`)
+│   ├── cli/                   # Command-line interface (§6a)
+│   │   ├── __init__.py        # main() + COMMAND_TREE
+│   │   ├── _base.py           # Subcommand / CommandGroup ABCs + dispatch
+│   │   ├── parse.py           # `parse`  -- file -> JSON (one-shot)
+│   │   ├── tail.py            # `tail`   -- file -> stream of JSON
+│   │   ├── inspect.py         # `inspect parsers` / `inspect parser <n>`
+│   │   └── serve.py           # `serve`  -- run the browser viewer
+│   ├── parsers/               # Parser plug-in subsystem
+│   │   ├── __init__.py        # Registry + detect_parser + UnknownFormatError
+│   │   ├── base.py            # TrajectoryParser ABC + ParsedTrajectory
+│   │   ├── _result.py         # assemble_trajectory: schema enforcement
+│   │   ├── molwatch_log.py    # .molwatch.log unified format (preferred)
+│   │   ├── siesta.py          # SIESTA v4.x / v5.x .out / .log
+│   │   └── pyscf.py           # geomeTRIC trajectory + siblings
+│   ├── templates/index.html   # Single-page UI markup
+│   └── static/
+│       ├── style.css          # Dark theme, responsive layout
+│       └── viewer.js          # 3Dmol viewer + Plotly + polling + tabs
+├── tests/                     # pytest suite
 │   ├── test_schema_conformance.py   # cross-parser schema enforcement
 │   ├── test_siesta_parser.py        # format-specific tests
 │   ├── test_pyscf_parser.py
 │   ├── test_molwatch_log_parser.py
 │   ├── test_registry.py             # detect_parser, error messages
 │   ├── test_api_load.py             # Flask load + polling endpoints
-│   └── test_app_concurrency.py      # lock-based race-condition guards
+│   ├── test_app_concurrency.py      # lock-based race-condition guards
+│   └── test_cli.py                  # parse / tail / inspect coverage
+├── pyproject.toml             # entry point: `molwatch = molwatch.cli:main`
 └── docs/
-    ├── architecture.md     # ← this file
-    └── spec/               # per-module contract docs
+    ├── architecture.md        # ← this file
+    └── spec/                  # per-module contract docs
         ├── README.md
         ├── api.md
+        ├── cli.md
         ├── parsers.md
         └── ui.md
 ```
@@ -260,7 +272,8 @@ fixture fails fast with an explicit "no fixture" error.
 
 ## 5. The Flask app
 
-`app.py` exposes three routes:
+`molwatch/web.py` exposes three routes (used by the browser UI
+loaded via ``molwatch serve``):
 
 - `GET /` — the single-page UI (templates/index.html).
 - `POST /api/load` — load a file by path (JSON `{"path": ...}`)
@@ -328,12 +341,11 @@ is the parser's `source_format` field):
 ## 6a. CLI design
 
 molwatch is web-first -- the primary user surface is the browser
-viewer at ``/``.  The CLI today is a single ``molwatch`` entry
-point that launches the Flask app (effectively just ``serve``).
-The redesigned CLI keeps that as the default and adds a small
-set of utility commands organised under the **same registry +
-namespace pattern** molbuilder uses.  The shared discipline
-makes the two tools feel like one ecosystem.
+viewer at ``/``.  The CLI keeps that as the default (bare
+``molwatch`` routes to ``serve``) and adds a small set of utility
+commands organised under the **same registry + namespace pattern**
+molbuilder uses.  The shared discipline makes the two tools feel
+like one ecosystem.
 
 ### Five principles (same as molbuilder)
 
@@ -405,13 +417,19 @@ module under ``cli/`` (or create a new ``CommandGroup``); append
 to ``COMMAND_TREE`` in ``cli/__init__.py``.  No edit to
 ``main()`` or central dispatch.
 
-### Status
+### Status (Apr 2026)
 
-This section documents the **planned shape**, not the
-current state.  As of today, ``molwatch`` is a single command
-launching the Flask app.  Implementation follows the molbuilder
-pattern -- framework first, then commands -- when there's a
-concrete pipeline that needs ``parse`` or ``tail``.
+Implemented.  ``molwatch/cli/`` ships the framework
+(``_base.py``) and the four subcommand modules
+(``parse.py`` / ``tail.py`` / ``inspect.py`` / ``serve.py``).
+Bare ``molwatch`` invokes ``serve`` for back-compat with the
+pre-CLI shape.  The pyproject entry point is
+``molwatch = molwatch.cli:main``.
+
+Tests: ``tests/test_cli.py`` covers happy paths + error matrix
+(missing file, unrecognised format, unknown parser name, bad
+subcommand) for every subcommand.  148 tests passing across
+the suite (134 existing + 14 new).
 
 ---
 

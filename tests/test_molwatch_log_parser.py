@@ -18,7 +18,7 @@ import math
 
 import pytest
 
-from parsers.molwatch_log import MolwatchLogParser
+from molwatch.parsers.molwatch_log import MolwatchLogParser
 
 
 # A small, hand-written log with two complete blocks + one torn one.
@@ -237,5 +237,5 @@ def test_registry_dispatches_to_molwatch_parser(mw_path):
     """The registry must pick MolwatchLogParser for `.molwatch.log` files
     -- not the SIESTA or PySCF parser, which would either reject or
     misread our format."""
-    from parsers import detect_parser
+    from molwatch.parsers import detect_parser
     assert detect_parser(mw_path) is MolwatchLogParser

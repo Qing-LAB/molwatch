@@ -18,7 +18,7 @@ import math
 
 import pytest
 
-from parsers._result import (
+from molwatch.parsers._result import (
     assemble_trajectory,
     _finite_or_none,
     _sanitise_scf_entry,

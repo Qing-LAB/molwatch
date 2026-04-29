@@ -79,31 +79,45 @@ order is `molwatch_log` → `siesta` → `pyscf`, most-specific first).
 
 ```
 molwatch/
-  app.py                       # Flask app (entry point)
-  parsers/                     # plug-in parser modules
-    __init__.py                # registry + auto-detect
-    base.py                    # TrajectoryParser ABC
-    siesta.py                  # SIESTA .out / .log
-    pyscf.py                   # PySCF / geomeTRIC trajectory
-  templates/index.html         # single-page UI
-  static/{style.css, viewer.js}
+  molwatch/
+    web.py                     # Flask app (used by `serve`)
+    cli/                       # CLI: parse / tail / inspect / serve
+    parsers/                   # plug-in parser modules
+      __init__.py              # registry + auto-detect
+      base.py                  # TrajectoryParser ABC
+      molwatch_log.py          # unified .molwatch.log (preferred)
+      siesta.py                # SIESTA .out / .log
+      pyscf.py                 # PySCF / geomeTRIC trajectory
+    templates/index.html       # single-page UI
+    static/{style.css, viewer.js}
   tests/                       # pytest suite
   requirements.txt             # flask only; tests via [test] extra
-  pyproject.toml
+  pyproject.toml               # entry point: molwatch.cli:main
 ```
 
 ## Quick start
 
 ```bash
 pip install -e .            # or: pip install -r requirements.txt
-molwatch                    # http://127.0.0.1:5000
+molwatch                    # http://127.0.0.1:5000  (= `molwatch serve`)
 ```
 
 Or with custom host/port:
 
 ```bash
-molwatch --port 8080 --host 0.0.0.0
+molwatch serve --port 8080 --host 0.0.0.0
 ```
+
+The CLI also has shell-friendly subcommands:
+
+```bash
+molwatch parse run.out > trajectory.json     # one-shot parse
+molwatch tail run.out --interval 30          # stream JSON as the file grows
+molwatch inspect parsers                     # list registered parsers
+molwatch inspect parser siesta --schema      # one parser's metadata as JSON
+```
+
+See `docs/spec/cli.md` for the full reference.
 
 Then open the page, paste the absolute path to your output file, and
 click **Load**.
@@ -141,14 +155,14 @@ script generators.  Typical pipeline:
 
 ```bash
 # 1. Build a structure and emit a runnable PySCF script
-molbuilder dna ATGCATGC --out dna.xyz
-molbuilder pyscf dna.xyz dna_relax.py
+molbuilder build dna ATGCATGC --out dna.xyz
+molbuilder modeling pyscf -i dna.xyz -o dna_relax.py
 
 # 2. Run the script (in another terminal)
 python dna_relax.py
 
 # 3. Watch it live in molwatch
-python -m molwatch.app          # paste /path/to/dna_relax_geom_optim.xyz
+molwatch                    # paste /path/to/dna_relax_geom_optim.xyz
 ```
 
 For SIESTA: `molbuilder fdf in.xyz dna.fdf` then `siesta < dna.fdf`,

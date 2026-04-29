@@ -21,8 +21,8 @@ import math
 
 import pytest
 
-from parsers import PARSERS
-from parsers.base import (
+from molwatch.parsers import PARSERS
+from molwatch.parsers.base import (
     ParsedTrajectory,
     REQUIRED_KEYS,
     OPTIONAL_KEYS,

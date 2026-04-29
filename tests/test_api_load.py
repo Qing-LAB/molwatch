@@ -12,7 +12,7 @@ import io
 
 import pytest
 
-import app as app_module
+from molwatch import web as app_module
 
 
 _SIESTA_HEAD = (

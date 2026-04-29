@@ -13,7 +13,7 @@ import math
 
 import pytest
 
-from parsers.siesta import SiestaParser
+from molwatch.parsers.siesta import SiestaParser
 
 
 SAMPLE = """\

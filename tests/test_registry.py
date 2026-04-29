@@ -8,14 +8,14 @@ from __future__ import annotations
 
 import pytest
 
-from parsers import (
+from molwatch.parsers import (
     PARSERS,
     UnknownFormatError,
     detect_parser,
     parser_summary,
 )
-from parsers.siesta import SiestaParser
-from parsers.pyscf  import PySCFParser
+from molwatch.parsers.siesta import SiestaParser
+from molwatch.parsers.pyscf  import PySCFParser
 
 
 _SIESTA_HEAD = (
@@ -102,9 +102,9 @@ def test_common_mistakes_lives_on_parser_classes(tmp_path):
     not the registry's.  Adding a new parser with new mistakes means
     overriding `common_mistakes` on that parser, NOT editing
     `detect_parser`."""
-    from parsers.siesta import SiestaParser
-    from parsers.pyscf import PySCFParser
-    from parsers.molwatch_log import MolwatchLogParser
+    from molwatch.parsers.siesta import SiestaParser
+    from molwatch.parsers.pyscf import PySCFParser
+    from molwatch.parsers.molwatch_log import MolwatchLogParser
 
     # SIESTA owns the .fdf hint.
     fdf = tmp_path / "siesta.fdf"

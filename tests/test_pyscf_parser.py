@@ -13,7 +13,7 @@ import math
 
 import pytest
 
-from parsers.pyscf import PySCFParser
+from molwatch.parsers.pyscf import PySCFParser
 
 
 SAMPLE = """\

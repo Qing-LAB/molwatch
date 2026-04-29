@@ -24,10 +24,10 @@ import math
 
 import pytest
 
-from parsers import PARSERS, detect_parser
-from parsers.molwatch_log import MolwatchLogParser
-from parsers.pyscf import PySCFParser
-from parsers.siesta import SiestaParser
+from molwatch.parsers import PARSERS, detect_parser
+from molwatch.parsers.molwatch_log import MolwatchLogParser
+from molwatch.parsers.pyscf import PySCFParser
+from molwatch.parsers.siesta import SiestaParser
 
 
 # --------------------------------------------------------------------- #

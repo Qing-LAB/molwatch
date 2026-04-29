@@ -28,16 +28,13 @@ test = [
 ]
 
 [project.scripts]
-molwatch = "app:main"
-
-[tool.setuptools]
-py-modules = ["app"]
+molwatch = "molwatch.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["parsers*"]
+include = ["molwatch*"]
 
 [tool.setuptools.package-data]
-"*" = ["templates/*.html", "static/*.css", "static/*.js"]
+"molwatch" = ["templates/*.html", "static/*.css", "static/*.js"]
 
 [tool.pytest.ini_options]
 minversion   = "7.0"

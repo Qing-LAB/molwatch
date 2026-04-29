@@ -1,27 +1,30 @@
-"""molwatch -- live trajectory viewer for SIESTA / PySCF / future.
+"""molwatch web app -- Flask server backing the browser viewer.
 
 A small Flask server that watches an output file (SIESTA .out,
-geomeTRIC's <prefix>_optim.xyz, etc.) while the calculation is still
-running and serves it to a 3Dmol.js browser viewer that updates while
-new frames are being written.
+geomeTRIC's ``<prefix>_optim.xyz``, the unified ``.molwatch.log``,
+etc.) while the calculation is still running and serves it to a
+3Dmol.js browser viewer that updates while new frames are being
+written.
 
-Usage
------
-    python app.py                         # http://127.0.0.1:5000
-    python app.py --port 8080 --host 0.0.0.0
+Public surfaces:
 
-Open the page, paste an absolute path to the output file, and click
-*Load*.  The page polls the server roughly every 15 seconds; when the
-file's mtime advances the parser re-runs and the viewer + plots
-refresh.
+  * :data:`app` -- the Flask application object.  Imported by
+    ``molwatch.cli.serve`` and by WSGI entry points.
+  * :func:`run_server` -- helper used by ``molwatch serve`` that
+    wraps ``app.run`` with security warnings.
 
-Format support is plugin-style: see ``parsers/`` for the registered
-parsers and ``parsers/__init__.py`` for the auto-detection registry.
+Use the ``molwatch`` CLI in normal usage:
+
+    molwatch                      # http://127.0.0.1:5000 (= `serve`)
+    molwatch serve --port 8080 --host 0.0.0.0
+
+Format support is plugin-style: see :mod:`molwatch.parsers` for
+the registered parsers and ``parsers/__init__.py`` for the
+auto-detection registry.
 """
 
 from __future__ import annotations
 
-import argparse
 import os
 import tempfile
 import time
@@ -30,12 +33,12 @@ from typing import Any, Dict, Optional, Tuple, Type, TypedDict
 
 from flask import Flask, jsonify, render_template, request
 
-from parsers import (
+from .parsers import (
     UnknownFormatError,
     detect_parser,
     parser_summary,
 )
-from parsers.base import TrajectoryParser, ParsedTrajectory
+from .parsers.base import TrajectoryParser, ParsedTrajectory
 
 
 # --------------------------------------------------------------------- #
@@ -294,34 +297,34 @@ def api_data():
     })
 
 
-_LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
+LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="molwatch -- live SIESTA / PySCF trajectory viewer."
-    )
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=5000)
-    parser.add_argument("--debug", action="store_true")
-    args = parser.parse_args()
+def run_server(host: str = "127.0.0.1",
+               port: int = 5000,
+               debug: bool = False) -> None:
+    """Start the Flask app.  Called by ``molwatch serve``.
 
-    # Loud warning when binding to non-loopback.  /api/load reads any
-    # file the server can access, so exposing it on a network interface
-    # is effectively a remote arbitrary-file-read endpoint.
-    if args.host not in _LOCAL_HOSTS:
-        import sys as _sys
-        print(f"WARNING: --host={args.host} exposes /api/load to the network.",
-              file=_sys.stderr)
-        print("         The endpoint reads ANY local file the server can",
-              file=_sys.stderr)
-        print("         access.  Only do this on a trusted single-user",
-              file=_sys.stderr)
-        print("         machine, or add a reverse-proxy with auth in front.",
-              file=_sys.stderr)
-
-    app.run(host=args.host, port=args.port, debug=args.debug, threaded=True)
-
-
-if __name__ == "__main__":
-    main()
+    Loud stderr warnings when binding to non-loopback or enabling
+    Flask's debugger -- ``/api/load`` reads any file the server can
+    access, so exposing it on a network interface is effectively a
+    remote arbitrary-file-read endpoint, and the debugger is a
+    remote-code-execution endpoint.
+    """
+    import sys as _sys
+    if host not in LOCAL_HOSTS:
+        print(
+            f"WARNING: --host={host} exposes /api/load to the network.\n"
+            "         The endpoint reads ANY local file the server can\n"
+            "         access.  Only do this on a trusted single-user\n"
+            "         machine, or add a reverse-proxy with auth in front.",
+            file=_sys.stderr,
+        )
+    if debug:
+        print(
+            "WARNING: Flask debug mode is on -- the debugger executes\n"
+            "         arbitrary code; never expose this on a non-\n"
+            "         loopback address.",
+            file=_sys.stderr,
+        )
+    app.run(host=host, port=port, debug=debug, threaded=True)
