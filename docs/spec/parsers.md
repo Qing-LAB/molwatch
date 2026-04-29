@@ -297,6 +297,120 @@ will simply not render the residual axis for those runs.
   format consistency.  When the log is absent or unreadable,
   `scf_history` is the empty list.
 
+## Detection order and debugging
+
+When the user submits a path, `app.py` calls `detect_parser(path)`
+which iterates `PARSERS` in registration order, calling each
+parser's `can_parse(path)` and returning the **first** parser whose
+detector returns `True`.  Order is intentional: more-specific
+detectors must come first so a permissive one can't shadow them.
+
+### Current registration order
+
+```
+1. MolwatchLogParser     -- header marker `# molwatch trajectory log`
+2. SiestaParser          -- SIESTA structural content
+3. PySCFParser           -- any well-formed XYZ trajectory
+```
+
+The order matters because PySCFParser's structural-XYZ rule is the
+most permissive (it accepts any well-formed multi-frame XYZ
+regardless of comment text).  If a future parser is added that
+recognises a different multi-frame XYZ variant by content, it must
+go **before** PySCFParser in the list.
+
+### What each detector actually does
+
+| Parser              | Scan window | Triggers                                                                                                                                                  |
+| ------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MolwatchLogParser` | 5 lines     | Any line starts with `# molwatch trajectory log`. Unambiguous; no engine emits this.                                                                       |
+| `SiestaParser`      | 300 lines   | Either (a) any of the strong content markers below appears; or (b) at least 3 lines start with `siesta:` or `redata:`.                                     |
+| `PySCFParser`       | 5 lines     | Line 0 is a positive integer ≤ 1,000,000 (atom count), line 1 is any text, and the next ≤ 3 lines parse as element + 3 floats.                              |
+
+#### `SiestaParser` strong content markers
+
+These are structural elements of SIESTA output, not banner text, so
+they survive header reformatting across SIESTA versions:
+
+| Marker                          | Where it appears                                       |
+| ------------------------------- | ------------------------------------------------------- |
+| `Executable      : siesta`      | v5.x line 1                                            |
+| `WELCOME TO SIESTA`             | v5.x banner (uppercase, asterisks)                     |
+| `Welcome to SIESTA`             | v4.x banner (mixed case)                               |
+| `siesta: System type`           | After basis setup; very stable across versions          |
+| `siesta: Atomic forces`         | After each SCF; appears in any run that converged once |
+| `outcoor: Atomic coordinates`   | Per-step block header                                   |
+| `outcell: Unit cell vectors`    | Per-step block header                                   |
+| `Begin CG opt`                  | Per-CG-step banner                                      |
+| `Begin MD opt`                  | Per-MD-step banner                                      |
+| `Begin Broyden opt`             | Broyden optimiser banner                                |
+| `Begin FIRE opt`                | FIRE optimiser banner                                   |
+
+If none of those is in the first 300 lines, the prefix-count safety
+net kicks in: any 3+ lines starting with `siesta:` or `redata:` are
+sufficient.
+
+### File-to-parser map (common cases)
+
+| File                                                        | Parser              | Notes                                                                  |
+| ----------------------------------------------------------- | ------------------- | ---------------------------------------------------------------------- |
+| `<job>.molwatch.log` (from molbuilder)                      | `MolwatchLogParser` | Preferred path -- single file, full schema, initial-geometry preview.  |
+| `siesta.out` / `<label>.out` / `siesta.log` (SIESTA v4.x)   | `SiestaParser`      | Banner markers + structural content cover this.                        |
+| Same files from SIESTA v5.x                                 | `SiestaParser`      | The new content markers (`Executable      : siesta`, etc.) cover v5.   |
+| `<job>_geom_optim.xyz` (geomeTRIC streaming trajectory)     | `PySCFParser`       | Multi-frame XYZ; geomeTRIC's `Iteration K Energy E` comments parsed.   |
+| `<initial>.xyz` (single-frame structure)                    | `PySCFParser`       | Renders as 1 frame, energy=None.  Useful for static preview.           |
+| ASE-style extended XYZ (`Lattice="..." Properties=...`)     | `PySCFParser`       | Comment text is ignored by detector; frames load with energy=None.     |
+| **`siesta.fdf` (the SIESTA INPUT)**                         | **none -- rejected** | This is the input we generated, not the output SIESTA writes.          |
+| **`pyscf_relax.log` (PySCF runtime log)**                   | **none -- rejected** | Wrong file: load the `_optim.xyz` sibling, or the `.molwatch.log`.     |
+
+### Debugging "No registered parser knows how to handle ..."
+
+The error message lists every registered parser with its hint.
+When you see it, follow this checklist:
+
+1. **Look at the file head**.  Run `head -30 <file>` and compare
+   the first few lines to the detection rules above.  This is the
+   single most useful debug step -- it almost always reveals the
+   mismatch immediately.
+
+2. **Are you pointed at the right file?**  Two common foot-guns:
+    - **`.fdf` vs `.out`**: `siesta.fdf` is the input molbuilder
+      generated; SIESTA writes its output to wherever you
+      redirected stdout (typically `siesta.out` or `<label>.out`).
+      An FDF has SystemName, AtomicCoordinatesAndAtomicSpecies,
+      etc. but none of the runtime markers (no `siesta:`-prefixed
+      lines from SIESTA itself), so the SIESTA detector correctly
+      rejects it.
+    - **`.log` vs `.xyz`** for PySCF: `<job>.log` is a human-
+      readable runtime log, `<job>_geom_optim.xyz` is the
+      geomeTRIC trajectory.  The PySCF detector wants the latter.
+      molbuilder additionally writes `<job>.molwatch.log` -- a
+      unified single-file format that's the easiest entry point.
+
+3. **Empty / truncated file?**  A run that just started may have
+   only header lines and no content markers yet.  SIESTA's verbose
+   v5 preamble can take a few seconds to flush.  Wait one polling
+   tick (15 s by default) and retry, or load
+   `<job>.molwatch.log` for an immediate initial-geometry preview.
+
+4. **Format the parser doesn't yet support?**  Add a new parser
+   per the "Adding a new format" section below.
+
+### When a file IS recognised but parses incorrectly
+
+The parsed result's `source_format` field tells you which parser
+claimed the file (`molwatch` / `siesta` / `pyscf`).  If the wrong
+parser claimed a borderline file, the fix is one of:
+
+- The detector should be more specific: tighten its markers so it
+  doesn't claim files that aren't actually its format.
+- The registry order is wrong: a more-specific parser belongs
+  earlier in `PARSERS` so it can claim the file before the
+  permissive one does.
+- The file is genuinely ambiguous and needs disambiguation by
+  filename or by additional content checks; add those checks to
+  the detector for whichever parser shouldn't claim it.
+
 ## Registry contract (`parsers/__init__.py`)
 
 ```python

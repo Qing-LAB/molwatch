@@ -80,6 +80,38 @@ def test_unknown_format_pyscf_log_suggests_optim_xyz(tmp_path):
     assert "pyscf_relax_geom_optim.xyz" in msg
 
 
+def test_unknown_format_fdf_suggests_out_file(tmp_path):
+    """A .fdf filename means the user loaded the SIESTA INPUT, not
+    the output.  The error must call this out explicitly and point
+    at the corresponding .out and .molwatch.log files."""
+    p = tmp_path / "siesta.fdf"
+    p.write_text("SystemName test\nNumberOfAtoms 2\n")  # FDF-shaped, not output
+    try:
+        detect_parser(str(p))
+    except UnknownFormatError as exc:
+        msg = str(exc)
+    else:
+        raise AssertionError("expected UnknownFormatError")
+    assert "INPUT" in msg or "input" in msg
+    assert "siesta.out" in msg
+    assert "siesta.molwatch.log" in msg
+
+
+def test_unknown_format_generic_hint_points_at_docs(tmp_path):
+    """For files that don't match either of the targeted hints, the
+    error message must still steer the user somewhere useful -- the
+    README and the spec doc both have a debug section."""
+    p = tmp_path / "mystery.dat"
+    p.write_text("not a recognised format\n")
+    try:
+        detect_parser(str(p))
+    except UnknownFormatError as exc:
+        msg = str(exc)
+    else:
+        raise AssertionError("expected UnknownFormatError")
+    assert "README" in msg or "docs/spec/parsers.md" in msg
+
+
 def test_registry_lists_all_parsers():
     names = [c.name for c in PARSERS]
     assert "siesta" in names

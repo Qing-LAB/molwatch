@@ -66,15 +66,38 @@ def detect_parser(path: str) -> Type[TrajectoryParser]:
         suffix = f" -- {c.hint}" if c.hint else ""
         lines.append(f"  * {c.label}{suffix}")
 
-    # Targeted suggestion: a PySCF run produces several files; users
-    # often grab the .log because the name is familiar, but the file
-    # we want is the geomeTRIC trajectory.  Stem-match instead of just
-    # `.log` so we don't spam the suggestion for SIESTA users (whose
-    # main output ALSO often ends in .log -- e.g. siesta.log).
+    # Filename-based hints for the two most common mistakes.  These
+    # are pure heuristics: we only trigger them on filename patterns
+    # that are unambiguous about user intent, so a real misfire is
+    # cheap.
     lower = base.lower()
-    if (lower.endswith(".log") and
-        ("pyscf" in lower or "_relax" in lower or "geom" in lower)):
-        # Best guess at what file they wanted.
+
+    # 1. .fdf is the SIESTA INPUT, not its output.  SIESTA writes
+    #    output to wherever stdout was redirected (typically
+    #    siesta.out / <label>.out).  Easy mistake because the .fdf
+    #    is the file molbuilder hands the user.
+    if lower.endswith(".fdf"):
+        stem = base[:-len(".fdf")]
+        lines.append("")
+        lines.append(
+            f"That looks like a SIESTA INPUT file (.fdf), not the "
+            f"output.  SIESTA writes its output to wherever you "
+            f"redirected stdout, typically:"
+        )
+        lines.append(f"    mpirun siesta < {base} > {stem}.out")
+        lines.append(
+            f"Load '{stem}.out' (or whatever you redirected to) "
+            f"instead.  If you generated this run with molbuilder, "
+            f"there's also a '{stem}.molwatch.log' alongside it that "
+            f"shows the initial geometry immediately."
+        )
+
+    # 2. PySCF .log is the runtime log; the parser wants the
+    #    geomeTRIC trajectory <job>_geom_optim.xyz instead.  Stem-
+    #    match so we don't spam the suggestion for SIESTA users
+    #    (whose main output ALSO often ends in .log).
+    elif (lower.endswith(".log") and
+          ("pyscf" in lower or "_relax" in lower or "geom" in lower)):
         stem = base
         for suffix in (".log", "_geom.log", "_pyscf.log"):
             if stem.endswith(suffix):
@@ -82,9 +105,21 @@ def detect_parser(path: str) -> Type[TrajectoryParser]:
                 break
         lines.append("")
         lines.append(
-            f"Looks like a PySCF run -- the streaming trajectory is "
-            f"'{stem}_geom_optim.xyz', not '.log'.  Look for the *.xyz "
-            f"file in the same folder."
+            f"Looks like a PySCF run -- load the geomeTRIC trajectory "
+            f"'{stem}_geom_optim.xyz' instead.  If you generated this "
+            f"run with molbuilder, '{stem}.molwatch.log' is the "
+            f"preferred single-file input."
+        )
+
+    # 3. Generic catch-all hint pointing at the debug guide.  Always
+    #    safe to include and steers the user to the docs that explain
+    #    what each parser actually checks.
+    else:
+        lines.append("")
+        lines.append(
+            "See README.md ('How auto-detection decides') or "
+            "docs/spec/parsers.md ('Detection order and debugging') "
+            "for the per-parser detection rules and a debug checklist."
         )
 
     raise UnknownFormatError("\n".join(lines))

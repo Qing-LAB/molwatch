@@ -17,15 +17,63 @@ backend is two steps: drop a `foo.py` that subclasses
 `TrajectoryParser` (see `parsers/base.py` for the contract), and
 append it to the `PARSERS` list in `parsers/__init__.py`.
 
-| backend | source | what's parsed |
-| --- | --- | --- |
-| `siesta` | `<run>.out` (the main SIESTA log) | per-step coords + E_KS + max-force + per-atom forces + lattice |
-| `pyscf`  | `<job>_geom_optim.xyz` (geomeTRIC trajectory) | per-step coords + energy (Hartree → eV).  Max-force pulled from `<job>_geom.qdata.txt` if present alongside. |
+| backend       | source                                                          | what's parsed                                                                                  |
+| ------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `molwatch`    | `<job>.molwatch.log` (molbuilder-generated unified log)         | per-step coords + energy + forces + per-cycle SCF history, all in one self-describing file    |
+| `siesta`      | `<run>.out` / `siesta.out` / `siesta.log` (SIESTA v4.x or v5.x) | per-step coords + E\_KS + max-force + per-atom forces + lattice + per-cycle SCF history       |
+| `pyscf`       | `<job>_geom_optim.xyz` (or any multi-frame XYZ)                  | per-step coords + energy (Hartree → eV); max-force from optional `<job>_geom.qdata.txt` sibling |
 
 Format is **auto-detected** from file content, so the same `Load`
-button handles either type — paste in either an absolute path to
-`run.out` or to `myjob_geom_optim.xyz` and the right parser is
-selected automatically.
+button handles every type — paste an absolute path to any of them and
+the right parser is selected automatically.
+
+### How auto-detection decides
+
+Detection is **content-based** — the file's name and extension are
+not used.  When you click Load, molwatch walks the parser registry
+in order and picks the **first** parser whose detector accepts the
+file:
+
+1. **`molwatch_log`** — checks the first 5 lines for the literal
+   marker `# molwatch trajectory log`.  This header is unique to
+   molbuilder-generated logs, so any file carrying it wins this
+   step regardless of what else is in it.
+2. **`siesta`** — reads the first 300 lines.  Accepts the file if
+   any structural SIESTA marker appears (`outcoor:`, `outcell:`,
+   `Begin CG opt`, `siesta: System type`, ...) **OR** at least 3
+   lines start with `siesta:` or `redata:`.  Both v4.x and v5.x
+   banners count as markers.
+3. **`pyscf`** — reads the first 5 lines.  Accepts the file if it
+   has the structural shape of an XYZ trajectory: line 0 is a
+   positive integer (atom count), line 1 is any comment, and the
+   following lines parse as element + 3 floats.
+
+If none accepts it, you'll see the "No registered parser knows how
+to handle ..." error in the status bar, listing what's supported.
+
+### Common debugging cases
+
+| What you see                               | Likely cause                                                            | What to load instead                                                                                  |
+| ------------------------------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| "No parser knows ... `siesta.fdf`"         | You loaded the SIESTA **input** file, not the output                    | `siesta.out` (or whatever you redirected stdout to: `mpirun siesta < siesta.fdf > siesta.out`)         |
+| "No parser knows ... `pyscf_relax.log`"    | You loaded the PySCF **runtime log**, not the geomeTRIC trajectory      | `pyscf_relax_geom_optim.xyz` (the `_optim.xyz` sibling), or `pyscf_relax.molwatch.log` if it exists    |
+| Empty viewer / "0 frames" mid-run          | The output file exists but no full step has been written yet            | Wait one polling tick (15 s by default), or load `<job>.molwatch.log` for the initial-geometry preview |
+| Your file is recognised but parsed wrongly | Borderline format — first parser that claimed it may not be the right one | Check the parsed result's `source_format` field via the API; file an issue with a 30-line head sample  |
+
+### Inspecting a misbehaving file by hand
+
+When detection or parsing seems wrong, the fastest debug step is to
+look at what the parser sees:
+
+```bash
+head -30 /path/to/your/file
+```
+
+Compare against the per-parser markers above — the file should match
+exactly one set of detection rules.  If it matches none, see the
+"Common debugging cases" table.  If it matches multiple, the
+registration order in `parsers/__init__.py` decides which wins (the
+order is `molwatch_log` → `siesta` → `pyscf`, most-specific first).
 
 ## Layout
 
