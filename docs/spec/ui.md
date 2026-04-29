@@ -36,9 +36,17 @@ build step — vanilla JS + 3Dmol.js + Plotly.
     step).  Visible iff `state.data.scf_history` is non-empty.
     Both engines populate this row via the same `scf_history`
     schema; the UI adapts three things by engine:
-    * **Banner title** (`#scf-title`): "PySCF SCF progress" /
-      "SIESTA SCF progress" / "SCF progress" (fallback).  Set
-      from `state.format`, never hard-coded in the template.
+    * **Banner title** (`#scf-title`): set from `state.format`,
+      never hard-coded in the template.  The title is more
+      specific where we have certainty, generic where we don't:
+      * SIESTA → "SIESTA DFT SCF progress" -- SIESTA only
+        implements Kohn-Sham DFT, so calling it just "SCF" is
+        correct but underspecified.
+      * PySCF → "PySCF SCF progress" -- PySCF supports both HF
+        (RHF/UHF) and DFT (RKS/UKS), and the parser doesn't
+        currently extract which one a given log used, so we stay
+        with the generic SCF label that's correct for both.
+      * Unknown engine → "SCF progress" (fallback).
     * **Step label** in the status line: "Geom-opt step" (PySCF) /
       "CG/MD step" (SIESTA) / "Opt step" (fallback).
     * **Residual axis**: `|g|` (eV/Å) when the cycle dicts carry

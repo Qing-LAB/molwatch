@@ -438,16 +438,25 @@
         // when the file was a unified molwatch.log without an engine
         // header (the molwatch.log emitter normally fills in "siesta"
         // or "pyscf" so this last case is the rare fallback).
+        //
+        // Banner-title precision rule: be specific where we have
+        // certainty, generic where we don't.
+        //   * SIESTA only implements DFT (Kohn-Sham), so we can
+        //     unambiguously call it "DFT SCF".
+        //   * PySCF can do either HF or DFT depending on the method
+        //     (RHF/UHF vs RKS/UKS) chosen by the script that wrote
+        //     the log.  The parser doesn't extract that today, so we
+        //     stay with the generic "SCF" -- which is correct for
+        //     either flavour.
+        //   * Unknown engine: neutral "SCF" without engine name.
         let bannerTitle, stepLabel;
         if (state.format === "siesta") {
-            bannerTitle = "SIESTA SCF progress";
+            bannerTitle = "SIESTA DFT SCF progress";
             stepLabel   = "CG/MD step";
         } else if (state.format === "pyscf") {
             bannerTitle = "PySCF SCF progress";
             stepLabel   = "Geom-opt step";
         } else {
-            // Generic fallback: don't lie about which engine produced
-            // the data when we don't know.
             bannerTitle = "SCF progress";
             stepLabel   = "Opt step";
         }
