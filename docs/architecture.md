@@ -325,6 +325,96 @@ is the parser's `source_format` field):
 
 ---
 
+## 6a. CLI design
+
+molwatch is web-first -- the primary user surface is the browser
+viewer at ``/``.  The CLI today is a single ``molwatch`` entry
+point that launches the Flask app (effectively just ``serve``).
+The redesigned CLI keeps that as the default and adds a small
+set of utility commands organised under the **same registry +
+namespace pattern** molbuilder uses.  The shared discipline
+makes the two tools feel like one ecosystem.
+
+### Five principles (same as molbuilder)
+
+1. **Two-level namespace by *kind of work***.
+2. **Subcommand registry**, not hardcoded dispatch.
+3. **Config / contract metadata drives the surface** -- when
+   relevant (here it's the parser registry, not an engine config,
+   but the principle is the same: "the thing being plugged in
+   describes its own surface").
+4. **Argument groups reflect contract sections** (when the
+   subcommand has more than a handful of flags).
+5. **Same data path for CLI / web / future automation** -- both
+   surfaces dispatch through the parser registry.
+
+### Top-level shape
+
+```
+molwatch
+├── parse      (file -> ParsedTrajectory; one-shot, exit on EOF)
+├── tail       (file -> stream of ParsedTrajectory deltas as it grows)
+├── inspect    (introspection on the parser registry)
+│   ├── parsers
+│   └── parser <name> --schema
+└── serve      (single command, no group; the default)
+```
+
+The grouping is intentionally **shallower** than molbuilder's
+because molwatch has fewer kinds of work: there's no "build" /
+"modeling" distinction (molwatch reads files, it doesn't generate
+them).  ``parse`` and ``tail`` are useful for cluster scripting
+(grep a converged energy out of a SIESTA ``.out`` without firing
+up a browser).  ``inspect`` mirrors molbuilder's.  ``serve`` is
+the current default behaviour and remains the entry point most
+users will hit.
+
+### Subcommand contracts
+
+* **``molwatch parse <file>``** -- detect format via
+  ``parsers.detect_parser``, parse, emit a single JSON object
+  conforming to ``ParsedTrajectory`` to stdout.  Suitable for
+  shell pipelines.  Exit codes: ``0`` success, ``2`` user
+  error (file missing / unrecognised format), ``1`` parser
+  exception.
+
+* **``molwatch tail <file>``** -- like ``parse``, but instead of
+  one-shot it polls ``mtime`` (default every 15 s, ``--interval``
+  to override) and emits one JSON line per detected change.
+  Each line is a complete ``ParsedTrajectory``; consumers can
+  diff against the previous to find what's new.  Stops on
+  ``Ctrl-C``.
+
+* **``molwatch inspect parsers``** -- list registered parsers
+  with their hints (the same payload the
+  ``parser_summary()`` helper returns, used internally for
+  ``UnknownFormatError`` messages).
+
+* **``molwatch inspect parser <name> --schema``** -- emit the
+  parser's name / label / hint / detection-marker docstring as
+  JSON.  Future automation can build documentation or web-form
+  pickers from this.
+
+* **``molwatch serve``** -- the existing Flask launcher.
+  ``--host`` / ``--port`` / ``--debug``, same defaults as today.
+
+### How to extend (CLI)
+
+Same as molbuilder.  Add a ``Subcommand`` subclass in the right
+module under ``cli/`` (or create a new ``CommandGroup``); append
+to ``COMMAND_TREE`` in ``cli/__init__.py``.  No edit to
+``main()`` or central dispatch.
+
+### Status
+
+This section documents the **planned shape**, not the
+current state.  As of today, ``molwatch`` is a single command
+launching the Flask app.  Implementation follows the molbuilder
+pattern -- framework first, then commands -- when there's a
+concrete pipeline that needs ``parse`` or ``tail``.
+
+---
+
 ## 7. How to extend
 
 ### 7.1  Add a new parser for a new engine output format
