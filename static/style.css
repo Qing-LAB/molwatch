@@ -270,12 +270,21 @@ main {
 .ctab-panel label.check {
     flex-direction: row;
     align-items: center;
+    justify-content: flex-start;     /* checkbox + label text flush left */
     gap: 8px;
     margin: 8px 0;
+    cursor: pointer;
+    user-select: none;
 }
-.ctab-panel label > input,
+/* Stretch text inputs / numeric inputs / selects to the panel width,
+   but NOT checkboxes -- those keep their natural ~13px square so the
+   following label text sits immediately to the right of the box. */
+.ctab-panel label > input:not([type="checkbox"]),
 .ctab-panel label > select {
     width: 100%;
+}
+.ctab-panel label.check > input[type="checkbox"] {
+    flex: 0 0 auto;                   /* don't grow / shrink */
 }
 .ctab-panel .row-with-readout {
     display: flex;
@@ -295,6 +304,27 @@ main {
     font-size: 0.78rem;
     color: var(--text-muted);
     line-height: 1.4;
+}
+.ctab-panel .panel-sep {
+    border: 0;
+    border-top: 1px solid var(--border-soft);
+    margin: 14px 0 12px;
+}
+.ctab-panel .full-btn {
+    width: 100%;
+    padding: 7px 10px;
+    background: var(--accent-bg);
+    border-color: var(--accent-strong);
+    color: var(--accent);
+    font-weight: 500;
+}
+.ctab-panel .full-btn:hover:not(:disabled) {
+    background: var(--accent-strong);
+    color: #fff;
+    border-color: var(--accent);
+}
+.ctab-panel .full-btn:disabled {
+    background: transparent;
 }
 
 /* ---- Form controls (shared) ---- */

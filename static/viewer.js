@@ -560,6 +560,10 @@
         }
         $("frame-tot").textContent = n - 1;
         $("frame-slider").max      = n - 1;
+        // Frames now exist -> enable the "Save current frame as XYZ"
+        // button (it's disabled-by-default in the template so users
+        // can't click it before any data is loaded).
+        $("save-frame").disabled = false;
 
         rebuildModel();
         const targetIdx = wasAtEnd ? n - 1 : Math.min(state.currentFrame, n - 1);
@@ -730,6 +734,65 @@
     $("next").addEventListener("click",  () => step(1));
     $("speed").addEventListener("change", () => {
         if (state.playTimer) play();    // restart with new cadence
+    });
+
+    /* ---- Save current frame as XYZ ------------------------------- */
+    /* Hands the displayed structure off to the next step in the
+       user's pipeline -- e.g., dropping the relaxed molecule into a
+       tunneling-gap setup as a bridge.  The output is plain XYZ
+       (Angstrom), which any chemistry tool reads. */
+    $("save-frame").addEventListener("click", () => {
+        if (!state.data || !state.data.frames.length) return;
+        const idx = state.currentFrame;
+        const frame = state.data.frames[idx];
+        if (!frame || !frame.length) return;
+
+        // Comment line: include the engine, step index, and energy
+        // when known.  Anything we know stays out of the structural
+        // part of the file -- a downstream parser that doesn't
+        // recognise the comment just sees a regular XYZ.
+        const engine = (state.format && state.format !== "?")
+            ? state.format : "molwatch";
+        const energyEv = (state.data.energies || [])[idx];
+        const fileStem = (state.label && state.label.replace(/[^A-Za-z0-9._-]+/g, "_"))
+            || engine;
+        const stepIdx = (state.data.iterations || [])[idx];
+        const stepLabel = (stepIdx !== undefined && stepIdx !== null)
+            ? "step " + stepIdx : "frame " + idx;
+
+        let comment = "molwatch export from " + engine + " — " + stepLabel;
+        if (typeof energyEv === "number" && isFinite(energyEv)) {
+            comment += "  energy " + energyEv.toFixed(8) + " eV";
+        }
+
+        // Build the XYZ text.  Format: standard 4-column XYZ, fixed
+        // 8-decimal coordinates (matches molbuilder's _save_xyz).
+        const lines = [String(frame.length), comment];
+        for (const row of frame) {
+            const el = String(row[0]).padEnd(2);
+            const x  = (+row[1]).toFixed(8).padStart(14);
+            const y  = (+row[2]).toFixed(8).padStart(14);
+            const z  = (+row[3]).toFixed(8).padStart(14);
+            lines.push("   " + el + "  " + x + "  " + y + "  " + z);
+        }
+        const text = lines.join("\n") + "\n";
+
+        // Trigger a browser download.  Filename includes the step
+        // index so multiple saves don't collide.
+        const filename = fileStem + "_step" + (stepIdx !== undefined
+            ? stepIdx : idx) + ".xyz";
+        const blob = new Blob([text], { type: "chemical/x-xyz" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        setStatus("Saved " + filename + " (" + frame.length
+            + " atoms).", "ok");
     });
 
     /* ---- Tabs (Style / Overlays / Playback) ---------------------- */

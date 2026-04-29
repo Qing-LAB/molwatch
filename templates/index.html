@@ -133,6 +133,17 @@ Engine-native files (also supported):
         <label class="check"><input type="checkbox" id="loop" checked>
           Loop playback</label>
         <p class="hint">Use the buttons and slider above to scrub frames.</p>
+
+        <hr class="panel-sep">
+
+        <button id="save-frame" class="full-btn"
+          title="Download the currently displayed frame as a standard .xyz file (Angstrom).&#10;Useful for handing the relaxed structure to the next step (tunneling-gap construction, transport calc, etc.)."
+          disabled>
+          Save current frame as XYZ
+        </button>
+        <p class="hint">Exports frame N's coordinates so you can use the
+          relaxed structure as input to the next step (e.g., dropping the
+          molecule into a tunneling gap as a bridge).</p>
       </div>
     </aside>
   </section>

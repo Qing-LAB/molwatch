@@ -28,6 +28,17 @@ build step — vanilla JS + 3Dmol.js + Plotly.
     regardless of which tab is open.  This keeps the controls
     aside compact and prevents it from pushing the plot rows down
     the page.
+
+    The Playback tab also carries a "Save current frame as XYZ"
+    button (`#save-frame`).  Disabled until a file with frames
+    is loaded; clicking it builds a standard 4-column XYZ from
+    `state.data.frames[state.currentFrame]` and triggers a browser
+    download.  The comment line records the source engine, the
+    step index from `state.data.iterations`, and the energy in eV
+    when known.  Filename is `<label>_step<N>.xyz`.  This is the
+    handoff point to downstream pipelines (tunneling-gap
+    construction, transport calc, etc.) that want a single static
+    structure rather than the live trajectory.
   * Row 2 (`.plots-row`): two Plotly canvases (energy vs step, max
     force vs step).
   * Row 3 (`.scf-row`, **engine-agnostic, hidden when empty**): a
