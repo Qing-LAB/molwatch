@@ -571,10 +571,43 @@
         makePlots();
 
         const ts = new Date(r.mtime * 1000).toLocaleTimeString();
-        setStatus(
-            "Loaded " + n + " " + state.label + " frames \u2014 mtime " + ts + ".",
-            "ok"
-        );
+        const wallClock = elapsedSinceStart(r);
+        let statusMsg = "Loaded " + n + " " + state.label
+            + " frames \u2014 mtime " + ts;
+        if (wallClock) {
+            statusMsg += " \u00b7 " + wallClock;
+        }
+        statusMsg += ".";
+        setStatus(statusMsg, "ok");
+    }
+
+    /* Format wall-clock elapsed = (mtime - created_at).
+       Returns a human-readable "started HH:MM:SS, running for HH:MM:SS"
+       string, or null when the parser couldn't extract a start time
+       (e.g., raw geomeTRIC _optim.xyz files). */
+    function elapsedSinceStart(r) {
+        const created = r.data && r.data.created_at;
+        if (!created || !r.mtime) return null;
+        // ISO 8601 without a timezone is interpreted as local time by
+        // the browser; SIESTA prints local time, the molwatch.log
+        // emitter writes local time too -- so this matches.
+        const startMs = Date.parse(created);
+        if (!isFinite(startMs)) return null;
+        const startedAt = new Date(startMs);
+        const seconds = Math.max(0, Math.round(r.mtime - startMs / 1000));
+        const startTs = startedAt.toLocaleTimeString();
+        return "started " + startTs + ", running for " + formatDuration(seconds);
+    }
+
+    /* HH:MM:SS for >= 1 h, MM:SS otherwise.  Tabular numerals so the
+       width doesn't jump on every poll. */
+    function formatDuration(totalSeconds) {
+        const h = Math.floor(totalSeconds / 3600);
+        const m = Math.floor((totalSeconds % 3600) / 60);
+        const s = totalSeconds % 60;
+        const pad = (n) => String(n).padStart(2, "0");
+        return h > 0 ? (h + ":" + pad(m) + ":" + pad(s))
+                     : (pad(m) + ":" + pad(s));
     }
 
     function startPolling() {

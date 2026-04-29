@@ -202,6 +202,11 @@ class PySCFParser(TrajectoryParser):
             "forces":        [[] for _ in frames],
             "scf_history":   scf_history,
             "source_format": cls.name,
+            # geomeTRIC's `_optim.xyz` carries no start timestamp.  The
+            # PySCF main `<job>.log` (sibling) has one but parsing it
+            # for time alone isn't worth the dependency; the front-end
+            # falls back to file mtime when created_at is None.
+            "created_at":    None,
         }
 
     # ------------------------------------------------------------- #

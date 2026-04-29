@@ -57,6 +57,7 @@ _BEGIN_RE = re.compile(r"====\s*molwatch\s+step\s+(\d+)\s+begin\s*====")
 _END_RE   = re.compile(r"====\s*molwatch\s+step\s+(\d+)\s+end\s*====")
 _HEADER_RE = re.compile(r"^#\s*molwatch\s+trajectory\s+log", re.IGNORECASE)
 _ENGINE_RE = re.compile(r"^#\s*engine:\s*(\S+)", re.IGNORECASE)
+_CREATED_RE = re.compile(r"^#\s*created:\s*(\S+)", re.IGNORECASE)
 
 
 def _maybe_float(token: str) -> Optional[float]:
@@ -89,6 +90,10 @@ class MolwatchLogParser(TrajectoryParser):
     @classmethod
     def parse(cls, path: str) -> Dict[str, Any]:
         engine = "molwatch"
+        # `# created: <ISO8601>` line at the top of the log; populated
+        # by molbuilder's emitter.  The UI uses this together with the
+        # file's mtime to display elapsed wall-clock time.
+        created_at: Optional[str] = None
         frames: List[List[List[Any]]] = []
         energies: List[Optional[float]] = []
         max_forces: List[Optional[float]] = []
@@ -126,6 +131,10 @@ class MolwatchLogParser(TrajectoryParser):
 
                 # ---- header lines (only meaningful before the first block) ----
                 if not in_block:
+                    m_created = _CREATED_RE.match(line)
+                    if m_created:
+                        created_at = m_created.group(1)
+                        continue
                     m_eng = _ENGINE_RE.match(line)
                     if m_eng:
                         engine = m_eng.group(1)
@@ -256,5 +265,6 @@ class MolwatchLogParser(TrajectoryParser):
             "max_forces":    max_forces,
             "forces":        forces_per_frame,
             "scf_history":   scf_history,
+            "created_at":    created_at,
             "source_format": engine,
         }

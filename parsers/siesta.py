@@ -27,6 +27,35 @@ from typing import Any, Dict, List, Optional
 from .base import TrajectoryParser
 
 
+# `>> Start of run:  28-APR-2026  20:01:39`  (SIESTA v5.x; v4.x uses
+# the same shape).  Captures day, abbreviated month, year, h:m:s.
+_START_RE = re.compile(
+    r">>\s*Start of run:\s+(\d{1,2})-([A-Z][A-Za-z]{2})-(\d{4})\s+"
+    r"(\d{1,2}):(\d{2}):(\d{2})"
+)
+_MONTH = {
+    "Jan": 1, "Feb": 2, "Mar": 3, "Apr": 4, "May": 5, "Jun": 6,
+    "Jul": 7, "Aug": 8, "Sep": 9, "Oct": 10, "Nov": 11, "Dec": 12,
+}
+
+
+def _parse_siesta_start_line(line: str) -> Optional[str]:
+    """Convert SIESTA's `>> Start of run: 28-APR-2026 20:01:39`
+    into ISO 8601 (`2026-04-28T20:01:39`).  Returns None if the line
+    doesn't match -- the caller treats `created_at` as optional."""
+    m = _START_RE.search(line)
+    if not m:
+        return None
+    day, mon_abbr, year, hh, mm, ss = m.groups()
+    # SIESTA prints the month uppercase; canonicalise so the dict
+    # lookup works regardless.
+    mon = _MONTH.get(mon_abbr.title())
+    if mon is None:
+        return None
+    return (f"{int(year):04d}-{mon:02d}-{int(day):02d}"
+            f"T{int(hh):02d}:{int(mm):02d}:{int(ss):02d}")
+
+
 # Matches a SIESTA SCF iteration line, e.g.:
 #   scf:    1   -289239.010   -290967.214   -290967.445   0.001  -1.0   0.5
 # Columns: iscf, Eharris(eV), E_KS(eV), FreeEng(eV), dDmax, Ef(eV), dHmax(eV).
@@ -121,6 +150,12 @@ class SiestaParser(TrajectoryParser):
         current_scf: List[Dict[str, float]] = []
         prev_E_KS: Optional[float] = None
 
+        # Wall-clock start time, populated from `>> Start of run:` (v4
+        # and v5 print this).  Stored as ISO 8601 so the front-end can
+        # subtract it from the file's mtime to display elapsed wall
+        # time without timezone fuss.
+        created_at: Optional[str] = None
+
         # Per-step buffers; flushed via _commit() when the next outcoor:
         # arrives or at EOF (only if the coords block is known to be
         # complete).
@@ -201,6 +236,12 @@ class SiestaParser(TrajectoryParser):
                         state = "scan"
 
                 # ---- scan mode ----
+                # Wall-clock start time: appears once near the top of
+                # the file in both v4 and v5.  Capture the first hit;
+                # ignore any later occurrences from interrupted reruns.
+                if created_at is None and ">> Start of run:" in line:
+                    created_at = _parse_siesta_start_line(line)
+
                 # SCF iteration line: collected into scf_history.  An
                 # iscf = 1 starts a new SCF run (= new CG/MD step's
                 # electronic problem).  Energy column is E_KS (already
@@ -283,4 +324,5 @@ class SiestaParser(TrajectoryParser):
             "forces":        forces_per_frame,
             "scf_history":   scf_history,
             "source_format": cls.name,
+            "created_at":    created_at,
         }
