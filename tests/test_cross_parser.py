@@ -22,9 +22,7 @@ from __future__ import annotations
 
 import math
 
-import pytest
-
-from molwatch.parsers import PARSERS, detect_parser
+from molwatch.parsers import PARSERS
 from molwatch.parsers.molwatch_log import MolwatchLogParser
 from molwatch.parsers.pyscf import PySCFParser
 from molwatch.parsers.siesta import SiestaParser

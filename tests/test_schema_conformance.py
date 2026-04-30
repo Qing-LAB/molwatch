@@ -22,11 +22,7 @@ import math
 import pytest
 
 from molwatch.parsers import PARSERS
-from molwatch.parsers.base import (
-    ParsedTrajectory,
-    REQUIRED_KEYS,
-    OPTIONAL_KEYS,
-)
+from molwatch.parsers.base import REQUIRED_KEYS, OPTIONAL_KEYS
 
 
 # --------------------------------------------------------------------- #
