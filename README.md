@@ -1,5 +1,9 @@
 # molwatch
 
+[![ci](https://github.com/Qing-LAB/molwatch/actions/workflows/ci.yml/badge.svg)](https://github.com/Qing-LAB/molwatch/actions/workflows/ci.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![python](https://img.shields.io/badge/python-3.9+-blue.svg)](pyproject.toml)
+
 A small Flask + 3Dmol.js webapp that watches a quantum-chemistry
 output file *while the calculation is still running* and shows:
 
