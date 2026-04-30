@@ -61,8 +61,9 @@ def traj_path(tmp_path):
 def test_bare_molwatch_routes_to_serve(monkeypatch, capsys):
     """``molwatch`` (no args) must dispatch to the serve subcommand
     so the historical "just open the browser viewer" workflow keeps
-    working.  We monkeypatch run_server so the test doesn't actually
-    try to bind a port."""
+    working.  Click's ``invoke_without_command`` + the root group's
+    ``ctx.invoke(serve)`` give us this routing.  We monkeypatch
+    run_server so the test doesn't actually try to bind a port."""
     called = {}
 
     def fake_run_server(host="127.0.0.1", port=5000, debug=False):
@@ -70,13 +71,12 @@ def test_bare_molwatch_routes_to_serve(monkeypatch, capsys):
         called["port"] = port
         called["debug"] = debug
 
+    # serve.py uses ``from .. import web`` then ``web.run_server(...)``
+    # so a single attr-patch on the source module reaches the call.
     monkeypatch.setattr("molwatch.web.run_server", fake_run_server)
-    # serve.py imports run_server at module load, so patch there too.
-    monkeypatch.setattr("molwatch.cli.serve.run_server", fake_run_server)
 
     rc = cli_main([])
     assert rc == 0
-    # Defaults from the serve subcommand.
     assert called == {"host": "127.0.0.1", "port": 5000, "debug": False}
 
 
@@ -222,10 +222,12 @@ def test_inspect_parser_unknown_name_exits_2(capsys):
 # --------------------------------------------------------------------- #
 
 
-def test_unknown_subcommand_exits_2_listing_known(capsys):
+def test_unknown_subcommand_exits_2_pointing_at_help(capsys):
+    """Click's ``no such command`` error includes the parent
+    command path so the user can run ``molwatch -h`` to discover
+    valid subcommands."""
     rc = cli_main(["totally-fake-subcommand"])
     assert rc == 2
     err = capsys.readouterr().err
     assert "totally-fake-subcommand" in err
-    # argparse lists the known subcommands in the error.
-    assert "parse" in err and "serve" in err
+    assert "molwatch" in err  # users get pointed at the right help

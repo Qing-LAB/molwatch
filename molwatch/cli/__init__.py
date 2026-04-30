@@ -1,6 +1,4 @@
-"""molwatch command-line interface.
-
-Top-level shape (see ``docs/spec/cli.md`` for the full reference):
+"""molwatch command-line interface (click-based).
 
     molwatch
     ├── parse      file -> ParsedTrajectory JSON (one-shot)
@@ -11,82 +9,57 @@ Top-level shape (see ``docs/spec/cli.md`` for the full reference):
     └── serve      run the browser viewer (default)
 
 Bare ``molwatch`` (no subcommand) is equivalent to ``molwatch
-serve``.  This back-compat route preserves the historical CLI
-shape -- everything that used to invoke ``app.py`` keeps working.
-
-Design rationale: ``docs/architecture.md`` §6a (mirrors molbuilder's
-§8a, with the same five principles).
+serve`` -- preserves the historical CLI shape.
 """
 
 from __future__ import annotations
 
 import sys
-from typing import List, Optional, Sequence
+from typing import Optional, Sequence
 
-from ._base import CommandTreeNode, run_main
-from .inspect import InspectGroup
-from .parse import ParseCmd
-from .serve import ServeCmd
-from .tail import TailCmd
+import click
 
-
-# --------------------------------------------------------------------- #
-#  The command tree                                                     #
-# --------------------------------------------------------------------- #
-
-#: Top-level commands, alphabetical for stable ``--help`` output.
-COMMAND_TREE: List[CommandTreeNode] = [
-    InspectGroup,
-    ParseCmd,
-    ServeCmd,
-    TailCmd,
-]
+from .inspect import inspect
+from .parse import parse
+from .serve import serve
+from .tail import tail
 
 
-# --------------------------------------------------------------------- #
-#  Entry point                                                          #
-# --------------------------------------------------------------------- #
+@click.group(invoke_without_command=True,
+             context_settings={"help_option_names": ["-h", "--help"]})
+@click.pass_context
+def cli(ctx):
+    """molwatch -- live trajectory viewer + parser CLI for SIESTA /
+    PySCF / molwatch unified logs.  Run bare ``molwatch`` for the
+    web UI; use the subcommands for shell-friendly JSON I/O."""
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(serve)
+
+
+cli.add_command(inspect)
+cli.add_command(parse)
+cli.add_command(serve)
+cli.add_command(tail)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    """Parse argv, dispatch.  Bare ``molwatch`` -> ``molwatch serve``.
-
-    The bare-form back-compat handling lives here rather than in
-    ``run_main`` so the framework stays generic (molbuilder doesn't
-    want a default subcommand; molwatch does).
-    """
-    # `argv is None` -> argparse picks up sys.argv[1:].  Look at it
-    # ourselves first so we can default-route an empty invocation.
-    effective = list(sys.argv[1:] if argv is None else argv)
-
-    # If the user invoked bare `molwatch` (no subcommand and no
-    # global flag like `--help`), route through `serve` so the
-    # historical "just run the web UI" workflow still works.
-    if not effective:
-        effective = ["serve"]
-
-    return run_main(
-        COMMAND_TREE,
-        effective,
-        prog="molwatch",
-        description=(
-            "molwatch -- live trajectory viewer + parser CLI for "
-            "SIESTA / PySCF / molwatch unified logs.  Run bare "
-            "``molwatch`` for the web UI; use the subcommands for "
-            "shell-friendly JSON I/O."
-        ),
-    )
+    """Entry-point for ``[project.scripts]`` and tests.  Catches
+    ``SystemExit`` so ``cli_main([...])`` returns the int rather
+    than terminating the process."""
+    try:
+        cli.main(args=argv, prog_name="molwatch", standalone_mode=True)
+        return 0
+    except SystemExit as exc:
+        code = exc.code
+        if code is None:
+            return 0
+        if isinstance(code, int):
+            return code
+        return 2
 
 
 if __name__ == "__main__":      # pragma: no cover
     sys.exit(main())
 
 
-__all__ = [
-    "main",
-    "COMMAND_TREE",
-    "InspectGroup",
-    "ParseCmd",
-    "ServeCmd",
-    "TailCmd",
-]
+__all__ = ["main", "cli", "inspect", "parse", "serve", "tail"]

@@ -18,6 +18,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Visualization",
 ]
 dependencies = [
+    "click>=8",
     "flask>=3.0",
 ]
 
